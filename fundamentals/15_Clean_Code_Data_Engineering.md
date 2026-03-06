@@ -84,14 +84,14 @@ Bad Code Impact:
 
 ### 1.3 Clean Code Principles Applied to DE
 
-| Principle | Data Engineering Application |
-|---|---|
-| Single Responsibility | One function = one transformation, One DAG = one data product |
-| DRY (Don't Repeat) | Shared transforms across pipelines, Reusable connectors & utilities |
-| KISS (Keep It Simple) | Simple SQL > complex Python, dbt model > custom Spark job |
+| Principle                       | Data Engineering Application                                              |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| Single Responsibility           | One function = one transformation, One DAG = one data product             |
+| DRY (Don't Repeat)              | Shared transforms across pipelines, Reusable connectors & utilities       |
+| KISS (Keep It Simple)           | Simple SQL > complex Python, dbt model > custom Spark job                 |
 | YAGNI (You Ain't Gonna Need It) | Don't build "generic framework" day 1, Start simple, refactor when needed |
-| Fail Fast | Validate data at entry point, Raise exceptions, don't swallow errors |
-| Explicit > Implicit | No magic numbers, no implicit configs, Type hints everywhere |
+| Fail Fast                       | Validate data at entry point, Raise exceptions, don't swallow errors      |
+| Explicit > Implicit             | No magic numbers, no implicit configs, Type hints everywhere              |
 
 ---
 

@@ -69,15 +69,15 @@ R - Result
 
 ### Bạn CÓ kinh nghiệm từ đâu?
 
-| Nguồn | Ví dụ stories |
-|-------|---------------|
-| **Đồ án môn học** | Data warehouse, ETL pipeline, database design |
-| **Project cá nhân** | Side projects, GitHub repos |
-| **Thực tập** | Dù chỉ 2-3 tháng cũng là kinh nghiệm quý |
-| **Hackathon/Competition** | Cuộc thi data, coding challenges |
-| **Học online** | Coursera projects, Kaggle notebooks |
-| **Làm nhóm** | Bất kỳ teamwork nào |
-| **Research** | Đề tài nghiên cứu, thesis |
+| Nguồn                     | Ví dụ stories                                 |
+| ------------------------- | --------------------------------------------- |
+| **Đồ án môn học**         | Data warehouse, ETL pipeline, database design |
+| **Project cá nhân**       | Side projects, GitHub repos                   |
+| **Thực tập**              | Dù chỉ 2-3 tháng cũng là kinh nghiệm quý      |
+| **Hackathon/Competition** | Cuộc thi data, coding challenges              |
+| **Học online**            | Coursera projects, Kaggle notebooks           |
+| **Làm nhóm**              | Bất kỳ teamwork nào                           |
+| **Research**              | Đề tài nghiên cứu, thesis                     |
 
 ### Story Bank - Chuẩn bị 5-7 stories
 
