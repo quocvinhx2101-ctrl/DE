@@ -1,0 +1,673 @@
+# Meta/Facebook Data Platform Architecture
+
+## Kiến Trúc Data Platform Của Meta - The Social Network Giant
+
+---
+
+## 🏢 TỔNG QUAN CÔNG TY
+
+- **Quy mô:** 3+ tỷ monthly active users (Facebook, Instagram, WhatsApp)
+- **Data scale:** Exabytes of data, largest data warehouse in the world
+- **Innovation:** Pioneers of many data technologies
+- **Open source contributions:** Presto, Spark improvements, RocksDB, Velox, PyTorch
+
+---
+
+## 🏗️ TỔNG QUAN KIẾN TRÚC
+
+```mermaid
+graph TB
+    subgraph Sources[" "]
+        Sources_title["📱 DATA SOURCES"]
+        style Sources_title fill:none,stroke:none,color:#333,font-weight:bold
+        S1["Posts / Likes"]
+        S2["Photos / Videos"]
+        S3["Messages Events"]
+        S4["Ads Events"]
+        S5["Instagram / WhatsApp"]
+    end
+
+    subgraph Ingestion[" "]
+        Ingestion_title["📥 INGESTION LAYER"]
+        style Ingestion_title fill:none,stroke:none,color:#333,font-weight:bold
+        Scribe["Scribe<br/>Distributed Log Aggregation"]
+        StreamProc["Stream Processing<br/>Real-time joins & features"]
+    end
+
+    subgraph Storage[" "]
+        Storage_title["💾 STORAGE LAYER"]
+        style Storage_title fill:none,stroke:none,color:#333,font-weight:bold
+        DWH["Data Warehouse<br/>Hive/Spark - Exabytes"]
+        FS["Feature Store<br/>Feature Platform"]
+        RT["Real-time Store<br/>TAO Social Graph<br/>ZippyDB KV Store"]
+    end
+
+    subgraph Query[" "]
+        Query_title["🔍 QUERY LAYER"]
+        style Query_title fill:none,stroke:none,color:#333,font-weight:bold
+        Presto["Presto<br/>Interactive SQL"]
+        SparkSQL["Spark SQL<br/>ETL / ML"]
+        Scuba["Scuba<br/>Real-time Analytics"]
+    end
+
+    subgraph MLPlatform[" "]
+        MLPlatform_title["🧠 ML PLATFORM"]
+        style MLPlatform_title fill:none,stroke:none,color:#333,font-weight:bold
+        PyTorch[PyTorch]
+        FBLearner[FBLearner Flow]
+        MLFeature[Feature Store]
+        ModelReg[Model Registry]
+        Inference[Inference Platform]
+    end
+
+    subgraph Products[" "]
+        Products_title["🚀 DATA PRODUCTS"]
+        style Products_title fill:none,stroke:none,color:#333,font-weight:bold
+        P1[News Feed Ranking]
+        P2[Ads Ranking]
+        P3[Content Recommend]
+        P4[Search Ranking]
+        P5[Integrity Detection]
+    end
+
+    S1 & S2 & S3 & S4 & S5 --> Scribe
+    Scribe --> StreamProc
+    StreamProc --> DWH & FS & RT
+    DWH & FS & RT --> Presto & SparkSQL & Scuba
+    Presto & SparkSQL & Scuba --> PyTorch & FBLearner & MLFeature & ModelReg & Inference
+    PyTorch & FBLearner --> P1 & P2 & P3 & P4 & P5
+```
+
+---
+
+## 🔧 TECH STACK CHI TIẾT
+
+### 1. Presto (Meta Created)
+
+**Origin:** Created by Facebook in 2012, now Trino (fork) and PrestoDB
+
+```
+PRESTO ARCHITECTURE:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        PRESTO                                    │
+│              (Distributed SQL Query Engine)                     │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                   Coordinator                             │   │
+│  │  - Query parsing                                         │   │
+│  │  - Query planning                                        │   │
+│  │  - Query scheduling                                      │   │
+│  └──────────────────────────┬───────────────────────────────┘   │
+│                             │                                    │
+│           ┌─────────────────┴─────────────────┐                 │
+│           v                                   v                 │
+│  ┌─────────────────┐               ┌─────────────────┐         │
+│  │ Worker 1        │               │ Worker N        │         │
+│  │ - Task execution│               │ - Task execution│         │
+│  │ - Data processing               │ - Data processing         │
+│  └─────────────────┘               └─────────────────┘         │
+│                                                                  │
+│  Connectors:                                                     │
+│  - Hive (HDFS/S3)                                               │
+│  - MySQL                                                        │
+│  - Kafka                                                        │
+│  - Cassandra                                                    │
+│  - Custom connectors                                            │
+└─────────────────────────────────────────────────────────────────┘
+
+
+PRESTO AT META:
+
+Scale:
+- 1000s of queries/second
+- 300+ PB scanned/day
+- 10,000s of users
+
+Use cases:
+- Interactive analytics (seconds)
+- A/B test analysis
+- Ad-hoc exploration
+- Dashboard backend
+```
+
+### 2. Spark at Meta Scale
+
+```
+SPARK AT META:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    SPARK DEPLOYMENT                              │
+│                                                                  │
+│  Scale:                                                          │
+│  - 10,000s of jobs/day                                          │
+│  - 1,000s of TB processed/day                                   │
+│  - Multi-exabyte data lake                                      │
+│                                                                  │
+│  Optimizations by Meta:                                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  1. Shuffle Optimization                                  │   │
+│  │     - Custom shuffle service                             │   │
+│  │     - Disaggregated shuffle storage                      │   │
+│  │                                                           │   │
+│  │  2. Adaptive Query Execution                              │   │
+│  │     - Runtime re-optimization                            │   │
+│  │     - Dynamic partition coalescing                       │   │
+│  │                                                           │   │
+│  │  3. Resource Management                                   │   │
+│  │     - Custom YARN scheduler                              │   │
+│  │     - Preemption for priority jobs                       │   │
+│  │                                                           │   │
+│  │  4. Caching                                               │   │
+│  │     - Distributed cache (Alluxio-like)                   │   │
+│  │     - Hot data acceleration                              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Use cases:                                                      │
+│  - ETL pipelines                                                │
+│  - ML training data preparation                                 │
+│  - Data quality checks                                          │
+│  - Privacy compliance (data deletion)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 3. TAO (The Associations and Objects)
+
+```
+TAO ARCHITECTURE:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        TAO                                       │
+│              (Distributed Social Graph Store)                   │
+│                                                                  │
+│  Data Model:                                                     │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Objects: Users, Posts, Photos, Pages                    │   │
+│  │  Associations: Friendships, Likes, Comments              │   │
+│  │                                                           │   │
+│  │  User(123) --[friend]--> User(456)                       │   │
+│  │  User(123) --[authored]--> Post(789)                     │   │
+│  │  User(456) --[liked]--> Post(789)                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Architecture:                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │            TAO Clients (App servers)                      │   │
+│  └──────────────────────────┬───────────────────────────────┘   │
+│                             │                                    │
+│  ┌──────────────────────────v───────────────────────────────┐   │
+│  │            TAO Leaders (Caching tier)                     │   │
+│  │  - Cache coherence                                       │   │
+│  │  - Write-through                                         │   │
+│  └──────────────────────────┬───────────────────────────────┘   │
+│                             │                                    │
+│  ┌──────────────────────────v───────────────────────────────┐   │
+│  │            TAO Followers (Read replicas)                  │   │
+│  │  - Read-only replicas                                    │   │
+│  │  - Geographic distribution                               │   │
+│  └──────────────────────────┬───────────────────────────────┘   │
+│                             │                                    │
+│  ┌──────────────────────────v───────────────────────────────┐   │
+│  │            MySQL (Persistent storage)                     │   │
+│  │  - Sharded by object ID                                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Scale:                                                          │
+│  - Billions of objects                                          │
+│  - Trillions of associations                                    │
+│  - 100B+ queries/day                                            │
+│  - 99.9999% cache hit rate                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4. Scuba (Real-time Analytics)
+
+```
+SCUBA ARCHITECTURE:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        SCUBA                                     │
+│              (Real-time in-memory analytics)                    │
+│                                                                  │
+│  Use Case: Real-time operational analytics                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - Site performance monitoring                           │   │
+│  │  - Product metrics (real-time)                           │   │
+│  │  - Error tracking                                        │   │
+│  │  - Ad hoc investigation                                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Architecture:                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Events (Scribe) --> Scuba Servers --> Query Results     │   │
+│  │                      (In-memory)                          │   │
+│  │                                                           │   │
+│  │  Key features:                                            │   │
+│  │  - In-memory columnar storage                            │   │
+│  │  - Automatic sampling for speed                          │   │
+│  │  - Time-based retention                                  │   │
+│  │  - Sub-second queries                                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Query:                                                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  SELECT country, COUNT(*)                                 │   │
+│  │  FROM app_errors                                         │   │
+│  │  WHERE timestamp > now() - interval '5 minutes'          │   │
+│  │  GROUP BY country                                        │   │
+│  │                                                           │   │
+│  │  Result in < 1 second                                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 5. Velox (Execution Engine)
+
+```
+VELOX ARCHITECTURE:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        VELOX                                     │
+│              (Unified Execution Engine)                         │
+│                                                                  │
+│  Goal: Common execution engine for Presto, Spark, etc.          │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                   Query Frontends                         │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐               │   │
+│  │  │ Presto   │  │ Spark    │  │ Custom   │               │   │
+│  │  └────┬─────┘  └────┬─────┘  └────┬─────┘               │   │
+│  └───────┼─────────────┼─────────────┼──────────────────────┘   │
+│          │             │             │                           │
+│          └─────────────┴─────────────┘                           │
+│                        │                                         │
+│                        v                                         │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                   Velox Engine                            │   │
+│  │                                                           │   │
+│  │  Key Features:                                            │   │
+│  │  - Vectorized execution (SIMD)                           │   │
+│  │  - Adaptive execution                                    │   │
+│  │  - Efficient memory management                           │   │
+│  │  - Arrow-compatible                                      │   │
+│  │                                                           │   │
+│  │  Components:                                              │   │
+│  │  - Type system                                           │   │
+│  │  - Functions library                                     │   │
+│  │  - Expression evaluation                                 │   │
+│  │  - Operators (scan, filter, join, agg)                   │   │
+│  │  - Memory pools                                          │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Open sourced: 2022                                              │
+│  Used by: Presto, potentially Spark, custom engines             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6. PyTorch (Deep Learning)
+
+```
+PYTORCH AT META:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        PYTORCH                                   │
+│              (Deep Learning Framework)                          │
+│                                                                  │
+│  Created: 2016 by Facebook AI Research (FAIR)                   │
+│  Status: Most popular research framework                        │
+│                                                                  │
+│  Use at Meta:                                                    │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - News Feed ranking                                     │   │
+│  │  - Ads prediction                                        │   │
+│  │  - Content understanding (CV, NLP)                       │   │
+│  │  - Integrity/safety detection                            │   │
+│  │  - Recommendations (Reels, Stories)                      │   │
+│  │  - AR/VR (Reality Labs)                                  │   │
+│  │  - Large Language Models (LLaMA)                         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Scale:                                                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - 1000s of models in production                         │   │
+│  │  - 100s of billions of inferences/day                    │   │
+│  │  - Custom hardware (training + inference)                │   │
+│  │  - Largest GPU clusters in the world                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎯 KEY DATA PRODUCTS
+
+### 1. News Feed Ranking
+
+**WHAT - Mục tiêu:**
+- Personalized feed for 3B+ users
+- Maximize meaningful engagement
+- Balance content types (friends, pages, ads)
+- Reduce harmful content exposure
+
+**HOW - Implementation:**
+
+```
+NEWS FEED RANKING:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    NEWS FEED RANKING                             │
+│                                                                  │
+│  Step 1: Inventory                                               │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - Friends' posts                                        │   │
+│  │  - Pages/Groups content                                  │   │
+│  │  - Ads                                                   │   │
+│  │  - Suggested content                                     │   │
+│  │  = 1000s of candidates                                   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Step 2: Signals (1000s of features)                             │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  User features:                                          │   │
+│  │  - Past engagement patterns                              │   │
+│  │  - Friend affinity scores                                │   │
+│  │  - Content type preferences                              │   │
+│  │                                                           │   │
+│  │  Content features:                                        │   │
+│  │  - Post age                                              │   │
+│  │  - Author engagement history                             │   │
+│  │  - Content type (text, photo, video)                     │   │
+│  │  - Engagement velocity                                   │   │
+│  │                                                           │   │
+│  │  Context features:                                        │   │
+│  │  - Time of day                                           │   │
+│  │  - Device type                                           │   │
+│  │  - Connection quality                                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Step 3: Prediction (Multiple models)                            │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  P(like) = model_like(features)                          │   │
+│  │  P(comment) = model_comment(features)                    │   │
+│  │  P(share) = model_share(features)                        │   │
+│  │  P(hide) = model_hide(features)                          │   │
+│  │  P(meaningful_interaction) = ...                         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Step 4: Ranking Score                                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Score = w1*P(like) + w2*P(comment) + w3*P(share)        │   │
+│  │          - w4*P(hide) + w5*P(meaningful)                 │   │
+│  │          + integrity_adjustment                          │   │
+│  │          + diversity_boost                               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Step 5: Final Ordering                                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - Sort by score                                         │   │
+│  │  - Apply business rules                                  │   │
+│  │  - Insert ads at optimal positions                       │   │
+│  │  - Ensure diversity                                      │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**WHY - Lý do & Impact:**
+- Core product driving daily engagement
+- Higher relevance = longer session times
+- Critical for user retention
+- Enables advertising business model
+
+---
+
+### 2. Ads System
+
+**WHAT - Mục tiêu:**
+- $100B+/year advertising revenue
+- Match ads với relevant users
+- Maximize ROI for advertisers
+- Maintain good user experience
+
+**HOW - Implementation:**
+
+```
+ADS RANKING SYSTEM:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    ADS RANKING                                   │
+│                                                                  │
+│  Objective: Maximize value for users, advertisers, and Meta     │
+│                                                                  │
+│  Ad Selection:                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  1. Advertiser bids on target audience                   │   │
+│  │  2. User profile matched against targeting               │   │
+│  │  3. Eligible ads retrieved                               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Ad Ranking:                                                     │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Total Value = Bid × P(Action) × Estimated Action Rate   │   │
+│  │              + User Value                                │   │
+│  │              - Quality Penalty                           │   │
+│  │                                                           │   │
+│  │  Where:                                                   │   │
+│  │  - P(Action) = probability of desired action (click/conv)│   │
+│  │  - User Value = relevance to user                        │   │
+│  │  - Quality = ad quality score                            │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ML Models:                                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - Click prediction (CTR)                                │   │
+│  │  - Conversion prediction (CVR)                           │   │
+│  │  - Quality prediction                                    │   │
+│  │  - User value prediction                                 │   │
+│  │                                                           │   │
+│  │  Training:                                                │   │
+│  │  - Billions of examples/day                              │   │
+│  │  - Real-time feature updates                             │   │
+│  │  - Continuous retraining                                 │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Revenue: $100B+/year from ads                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**WHY - Lý do & Impact:**
+- Primary revenue source
+- Better targeting = higher advertiser ROI
+- Relevant ads = better user experience
+- Self-serve platform = massive scalability
+
+---
+
+### 3. Integrity & Safety
+
+**WHAT - Mục tiêu:**
+- Protect 3B+ users from harmful content
+- Remove hate speech, misinformation, spam
+- Detect fake accounts và coordinated behavior
+- Maintain platform trust
+
+**HOW - Implementation:**
+
+```
+INTEGRITY SYSTEMS:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    INTEGRITY PLATFORM                            │
+│                                                                  │
+│  Detection Types:                                                │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  - Hate speech                                           │   │
+│  │  - Misinformation                                        │   │
+│  │  - Spam                                                  │   │
+│  │  - Fake accounts                                         │   │
+│  │  - Coordinated inauthentic behavior                      │   │
+│  │  - Harmful content                                       │   │
+│  │  - Bullying/harassment                                   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Detection Pipeline:                                             │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                                                           │   │
+│  │  Content Posted                                          │   │
+│  │       │                                                   │   │
+│  │       v                                                   │   │
+│  │  ┌─────────────────────┐                                 │   │
+│  │  │ Real-time Classifiers                                │   │
+│  │  │ - Text (NLP)        │                                 │   │
+│  │  │ - Image (CV)        │                                 │   │
+│  │  │ - Video (CV+Audio)  │                                 │   │
+│  │  └──────────┬──────────┘                                 │   │
+│  │             │                                             │   │
+│  │       ┌─────┴─────┐                                       │   │
+│  │       v           v                                       │   │
+│  │   ┌──────────┐  ┌──────────┐                             │   │
+│  │   │ High     │  │ Border-  │                             │   │
+│  │   │ Confidence│  │ line     │                             │   │
+│  │   │ -> Remove │  │ -> Review│                             │   │
+│  │   └──────────┘  └──────────┘                             │   │
+│  │                                                           │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  Scale:                                                          │
+│  - Billions of content pieces/day reviewed                      │
+│  - 100s of languages                                            │
+│  - Milliseconds latency                                         │
+└─────────────────────────────────────────────────────────────────┘
+
+**WHY - Lý do & Impact:**
+- Critical for platform trust
+- Billions of harmful content removed/year
+- Regulatory compliance required
+- User safety = platform longevity
+│  - 40,000+ human reviewers for edge cases                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ META OPEN SOURCE CONTRIBUTIONS
+
+```
+META OSS ECOSYSTEM:
+
+Data Engineering:
+├── Presto              - Distributed SQL (now Trino fork too)
+├── RocksDB             - Embedded key-value store
+├── Velox               - Unified execution engine
+└── Scribe              - Distributed log aggregation
+
+ML/AI:
+├── PyTorch             - Deep learning framework
+├── FAISS               - Similarity search
+├── LLaMA               - Large language model
+├── Detectron2          - Object detection
+└── fairseq             - Sequence modeling
+
+Infrastructure:
+├── React               - UI framework
+├── GraphQL             - Query language
+├── Cassandra           - Distributed database (co-creator)
+├── Open Compute        - Hardware designs
+└── Katran              - Load balancer
+
+Mobile:
+├── React Native        - Mobile development
+├── Hermes              - JavaScript engine
+└── Litho               - UI framework
+```
+
+---
+
+## 📊 SCALE & NUMBERS
+
+```
+META BY THE NUMBERS:
+
+Users:
+- 3.1B daily active users (family of apps)
+- 3.9B monthly active users
+- 100+ billion messages/day (WhatsApp + Messenger)
+
+Data:
+- Exabytes of data in warehouse
+- 300+ PB scanned daily by Presto
+- 100+ trillion edges in social graph
+- Millions of ML model inferences/second
+
+Infrastructure:
+- 100s of thousands of servers
+- Custom data centers worldwide
+- Custom hardware (training chips, inference)
+- One of largest AI compute installations
+```
+
+---
+
+## 🔑 KEY LESSONS
+
+### 1. Build for Massive Scale
+- Everything designed for billions of users
+- Horizontal scaling everywhere
+- Caching is critical (TAO)
+
+### 2. Unified Platforms
+- Single query engine (Presto)
+- Single ML framework (PyTorch)
+- Single execution engine (Velox)
+- Reduces complexity, improves efficiency
+
+### 3. Open Source Strategy
+- Open source core infrastructure
+- Community improves products
+- Industry standardization benefits everyone
+
+### 4. Real-time is Essential
+- Scuba for operational analytics
+- Streaming for features
+- Sub-second integrity decisions
+
+### 5. ML at the Core
+- Every product uses ML
+- Custom hardware for scale
+- Continuous model improvement
+
+---
+
+## 🔗 OPEN-SOURCE REPOS (Verified)
+
+Meta (Facebook) đóng góp nhiều infrastructure tools trở thành industry standard:
+
+| Repo | Stars | Mô Tả |
+|------|-------|--------|
+| [prestodb/presto](https://github.com/prestodb/presto) | 16k⭐ | Distributed SQL query engine — **Facebook tạo ra**. Nhánh chính thức. |
+| [trinodb/trino](https://github.com/trinodb/trino) | 10k⭐ | Fork của Presto bởi original creators (Martin Traverso, Dain Sundstrom, David Phillips). |
+| [pytorch/pytorch](https://github.com/pytorch/pytorch) | 87k⭐ | ML framework — **Meta tạo ra**. Nền tảng cho ML platform của Meta. |
+| [facebookincubator/velox](https://github.com/facebookincubator/velox) | 3.4k⭐ | Unified execution engine — **Meta tạo ra**. C++ vectorized execution. |
+
+> 💡 **Lưu ý:** Presto có 2 forks — `prestodb/presto` (Meta maintain) và `trinodb/trino` (original creators). Trino có community active hơn.
+
+---
+
+## 📚 REFERENCES
+
+**Engineering Blog:**
+- Meta Engineering: https://engineering.fb.com/
+
+**Key Articles:**
+- Presto: https://prestodb.io/
+- TAO: https://engineering.fb.com/2013/06/25/core-infra/tao-the-power-of-the-graph/
+- Velox: https://velox-lib.io/
+
+**Papers:**
+- Presto: SQL on Everything (ICDE 2019)
+- TAO: Facebook's Distributed Data Store (USENIX ATC 2013)
+- Scuba: Diving into Data at Facebook (VLDB 2013)
+
+---
+
+*Document Version: 1.1*
+*Last Updated: February 2026*
