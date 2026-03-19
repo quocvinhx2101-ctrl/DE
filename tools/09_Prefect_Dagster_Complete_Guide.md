@@ -20,56 +20,52 @@
 
 ### Evolution of Orchestration
 
-```
-Timeline of Orchestrators:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  2010s ────────────────────────────────────────────────── 2020s+    │
-│                                                                      │
-│  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐             │
-│  │  Cron   │──►│  Luigi  │──►│ Airflow │──►│ Prefect │             │
-│  │(scripts)│   │ (2012)  │   │ (2014)  │   │ (2018)  │             │
-│  └─────────┘   └─────────┘   └─────────┘   └─────────┘             │
-│                                   │              │                  │
-│                                   │              │   ┌─────────┐    │
-│                                   │              └──►│ Dagster │    │
-│                                   │                  │ (2019)  │    │
-│                                   │                  └─────────┘    │
-│                                   │                                 │
-│                              Still dominant                         │
-│                              but competitors rising                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph TIME [" "]
+        direction TB
+        T_TITLE["Timeline of Orchestrators"]
+        style T_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        T_LABEL["2010s ────────────────────────────────────────────────── 2020s+"]
+        style T_LABEL fill:none,stroke:none,font-weight:bold
+        
+        subgraph FLOW [" "]
+            direction LR
+            C["Cron<br>(scripts)"] --> L["Luigi<br>(2012)"] --> A["Airflow<br>(2014)"] --> P["Prefect<br>(2018)"]
+            A --> D["Dagster<br>(2019)"]
+        end
+        
+        NOTE["Still dominant<br>but competitors rising"]
+        style NOTE fill:none,stroke:none,font-style:italic,color:#666
+        
+        T_LABEL ~~~ FLOW ~~~ NOTE
+    end
 ```
 
 ### Key Differences at a Glance
 
-```
-Airflow vs Prefect vs Dagster:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Philosophy:                                                         │
-│  • Airflow: Tasks first, data implicit                              │
-│  • Prefect: Tasks first, but simpler                                │
-│  • Dagster: Assets/Data first, tasks derived                        │
-│                                                                      │
-│  Deployment:                                                         │
-│  • Airflow: Self-hosted complex, managed options                    │
-│  • Prefect: Simple self-host, excellent cloud                       │
-│  • Dagster: Simple self-host, excellent cloud                       │
-│                                                                      │
-│  Learning Curve:                                                     │
-│  • Airflow: Steep (many concepts)                                   │
-│  • Prefect: Gentle (Python-native)                                  │
-│  • Dagster: Moderate (new paradigm)                                 │
-│                                                                      │
-│  Testing:                                                            │
-│  • Airflow: Difficult                                               │
-│  • Prefect: Easy (just Python)                                      │
-│  • Dagster: Excellent (built-in)                                    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+> **Airflow vs Prefect vs Dagster:**
+> 
+> * **Philosophy:**
+>   * Airflow: Tasks first, data implicit
+>   * Prefect: Tasks first, but simpler
+>   * Dagster: Assets/Data first, tasks derived
+> 
+> * **Deployment:**
+>   * Airflow: Self-hosted complex, managed options
+>   * Prefect: Simple self-host, excellent cloud
+>   * Dagster: Simple self-host, excellent cloud
+> 
+> * **Learning Curve:**
+>   * Airflow: Steep (many concepts)
+>   * Prefect: Gentle (Python-native)
+>   * Dagster: Moderate (new paradigm)
+> 
+> * **Testing:**
+>   * Airflow: Difficult
+>   * Prefect: Easy (just Python)
+>   * Dagster: Excellent (built-in)
 
 ---
 
@@ -90,44 +86,37 @@ Prefect là một **modern workflow orchestration framework** được thiết k
 
 ### Architecture
 
-```
-Prefect Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                     Prefect Cloud / Server                   │    │
-│  │  • Flow run tracking                                        │    │
-│  │  • Scheduling                                               │    │
-│  │  • Work pool management                                     │    │
-│  │  • Observability                                            │    │
-│  │  • Automations                                              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              ▲                                       │
-│                              │ API                                   │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                        Workers                               │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │    │
-│  │  │   Worker    │  │   Worker    │  │   Worker    │          │    │
-│  │  │  (Process)  │  │(Kubernetes) │  │   (Docker)  │          │    │
-│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘          │    │
-│  │         │                │                │                  │    │
-│  │         ▼                ▼                ▼                  │    │
-│  │     ┌───────┐        ┌───────┐        ┌───────┐             │    │
-│  │     │ Flow  │        │ Flow  │        │ Flow  │             │    │
-│  │     │ Run 1 │        │ Run 2 │        │ Run 3 │             │    │
-│  │     └───────┘        └───────┘        └───────┘             │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  Infrastructure Types:                                               │
-│  • Process (local)                                                  │
-│  • Docker                                                           │
-│  • Kubernetes                                                       │
-│  • AWS ECS                                                          │
-│  • Google Cloud Run                                                 │
-│  • Azure Container Instances                                        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ARCH [" "]
+        direction TB
+        A_TITLE["Prefect Architecture"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        CLOUD["Prefect Cloud / Server<br>• Flow run tracking<br>• Scheduling<br>• Work pool management<br>• Observability<br>• Automations"]
+        
+        subgraph WRK ["Workers"]
+            direction LR
+            W1["Worker<br>(Process)"]
+            W2["Worker<br>(Kubernetes)"]
+            W3["Worker<br>(Docker)"]
+            
+            F1["Flow<br>Run 1"]
+            F2["Flow<br>Run 2"]
+            F3["Flow<br>Run 3"]
+            
+            W1 --> F1
+            W2 --> F2
+            W3 --> F3
+        end
+        
+        WRK <-->|"API"| CLOUD
+        
+        INFRA["Infrastructure Types:<br>• Process (local)<br>• Docker<br>• Kubernetes<br>• AWS ECS<br>• Google Cloud Run<br>• Azure Container Instances"]
+        style INFRA fill:none,stroke:none,text-align:left
+        
+        WRK ~~~ INFRA
+    end
 ```
 
 ### Core Concepts
@@ -353,83 +342,63 @@ Dagster là một **data orchestrator for the whole development lifecycle** vớ
 
 ### Philosophy: Assets vs Tasks
 
-```
-Traditional (Task-centric):
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  "What do we DO?"                                                   │
-│                                                                      │
-│  [Extract Task] ──► [Transform Task] ──► [Load Task]                │
-│                                                                      │
-│  Focus: Operations, execution order                                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-
-Dagster (Asset-centric):
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  "What do we PRODUCE?"                                              │
-│                                                                      │
-│  [Raw Orders]                                                       │
-│       │                                                              │
-│       ▼                                                              │
-│  [Cleaned Orders]                                                   │
-│       │                                                              │
-│       ▼                                                              │
-│  [Daily Order Summary]                                              │
-│       │                                                              │
-│       ▼                                                              │
-│  [ML Features]                                                      │
-│                                                                      │
-│  Focus: Data produced, lineage, freshness                           │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PHIL [" "]
+        direction TB
+        
+        subgraph TRAD ["Traditional (Task-centric)"]
+            direction TB
+            TQ["What do we DO?"]
+            style TQ fill:none,stroke:none,font-style:italic
+            T1["Extract Task"] --> T2["Transform Task"] --> T3["Load Task"]
+            TF["Focus: Operations, execution order"]
+            style TF fill:none,stroke:none,text-align:left
+            TQ ~~~ T1
+            T3 ~~~ TF
+        end
+        
+        subgraph DAGS ["Dagster (Asset-centric)"]
+            direction TB
+            DQ["What do we PRODUCE?"]
+            style DQ fill:none,stroke:none,font-style:italic
+            D1["Raw Orders"] --> D2["Cleaned Orders"] --> D3["Daily Order Summary"] --> D4["ML Features"]
+            DF["Focus: Data produced, lineage, freshness"]
+            style DF fill:none,stroke:none,text-align:left
+            DQ ~~~ D1
+            D4 ~~~ DF
+        end
+        
+        TRAD ~~~ DAGS
+    end
 ```
 
 ### Architecture
 
-```
-Dagster Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Dagster Webserver (Dagit)               │    │
-│  │  • Asset graph visualization                                 │    │
-│  │  • Run monitoring                                           │    │
-│  │  • Asset lineage                                            │    │
-│  │  • Partition management                                     │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              ▲                                       │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Dagster Daemon                          │    │
-│  │  • Scheduler                                                │    │
-│  │  • Sensors                                                  │    │
-│  │  • Run queue                                                │    │
-│  │  • Backfill management                                      │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Code Locations                            │    │
-│  │  ┌─────────────────┐  ┌─────────────────┐                   │    │
-│  │  │  Code Location 1 │  │  Code Location 2 │                  │    │
-│  │  │  (project_a)     │  │  (project_b)     │                  │    │
-│  │  │  - Assets        │  │  - Assets        │                  │    │
-│  │  │  - Jobs          │  │  - Jobs          │                  │    │
-│  │  │  - Schedules     │  │  - Schedules     │                  │    │
-│  │  │  - Sensors       │  │  - Sensors       │                  │    │
-│  │  └─────────────────┘  └─────────────────┘                   │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  Run Launchers:                                                      │
-│  • DefaultRunLauncher (local)                                       │
-│  • K8sRunLauncher (Kubernetes)                                      │
-│  • DockerRunLauncher                                                │
-│  • EcsRunLauncher (AWS ECS)                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ARCH2 [" "]
+        direction TB
+        A_TITLE2["Dagster Architecture"]
+        style A_TITLE2 fill:none,stroke:none,font-weight:bold,color:#333
+        
+        UI["Dagster Webserver (Dagit)<br>• Asset graph visualization<br>• Run monitoring<br>• Asset lineage<br>• Partition management"]
+        DMN["Dagster Daemon<br>• Scheduler<br>• Sensors<br>• Run queue<br>• Backfill management"]
+        
+        subgraph CODE ["Code Locations"]
+            direction LR
+            C1["Code Location 1 (project_a)<br>- Assets<br>- Jobs<br>- Schedules<br>- Sensors"]
+            C2["Code Location 2 (project_b)<br>- Assets<br>- Jobs<br>- Schedules<br>- Sensors"]
+        end
+        
+        UI <--> DMN
+        DMN --> CODE
+        
+        LCH["Run Launchers:<br>• DefaultRunLauncher (local)<br>• K8sRunLauncher (Kubernetes)<br>• DockerRunLauncher<br>• EcsRunLauncher (AWS ECS)"]
+        style LCH fill:none,stroke:none,text-align:left
+        
+        CODE ~~~ LCH
+    end
 ```
 
 ### Core Concepts
@@ -674,28 +643,21 @@ def test_asset_pipeline():
 
 ### Detailed Comparison
 
-```
-Feature Matrix:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Feature              │ Prefect    │ Dagster    │ Airflow           │
-│  ─────────────────────┼────────────┼────────────┼─────────────────  │
-│  Core Abstraction     │ Tasks/Flows│ Assets     │ Tasks/DAGs        │
-│  Testing              │ Easy       │ Excellent  │ Difficult         │
-│  Local Development    │ Excellent  │ Excellent  │ Moderate          │
-│  UI/Visualization     │ Good       │ Excellent  │ Good              │
-│  Asset Lineage        │ Basic      │ Excellent  │ Limited           │
-│  Partitioning         │ Good       │ Excellent  │ Good              │
-│  Dynamic Tasks        │ Excellent  │ Good       │ Good (2.3+)       │
-│  dbt Integration      │ Good       │ Excellent  │ Good              │
-│  Kubernetes           │ Excellent  │ Excellent  │ Excellent         │
-│  Cloud Offering       │ Excellent  │ Excellent  │ Many options      │
-│  Community Size       │ Growing    │ Growing    │ Large             │
-│  Learning Curve       │ Low        │ Moderate   │ High              │
-│  Maturity             │ Moderate   │ Moderate   │ High              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Feature | Prefect | Dagster | Airflow |
+| :--- | :--- | :--- | :--- |
+| **Core Abstraction** | Tasks/Flows | Assets | Tasks/DAGs |
+| **Testing** | Easy | Excellent | Difficult |
+| **Local Development** | Excellent | Excellent | Moderate |
+| **UI/Visualization** | Good | Excellent | Good |
+| **Asset Lineage** | Basic | Excellent | Limited |
+| **Partitioning** | Good | Excellent | Good |
+| **Dynamic Tasks** | Excellent | Good | Good (2.3+) |
+| **dbt Integration** | Good | Excellent | Good |
+| **Kubernetes** | Excellent | Excellent | Excellent |
+| **Cloud Offering** | Excellent | Excellent | Many options |
+| **Community Size** | Growing | Growing | Large |
+| **Learning Curve** | Low | Moderate | High |
+| **Maturity** | Moderate | Moderate | High |
 
 ### Pricing (as of 2025)
 

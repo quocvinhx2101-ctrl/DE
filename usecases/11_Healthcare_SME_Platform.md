@@ -62,43 +62,34 @@
 
 **HIPAA-Compliant Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Healthcare Sources                        │
-├──────────────┬──────────────┬──────────────┬────────────────┤
-│     EHR      │   Practice   │   Billing    │   CRM          │
-│  (Epic/Cerner)│  Management │   System     │  (Salesforce)  │
-└──────┬───────┴──────┬───────┴──────┬───────┴───────┬────────┘
-       │              │              │               │
-       │              │              │               │
-       ▼              ▼              ▼               ▼
-┌─────────────────────────────────────────────────────────────┐
-│               HIPAA-Compliant Integration                    │
-│          Fivetran (BAA) / Healthcare APIs                    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│            Snowflake Healthcare & Life Sciences              │
-│                    (BAA, HIPAA-ready)                        │
-│                                                              │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              De-identification Layer                 │   │
-│   │     PHI → Tokenized/Hashed identifiers              │   │
-│   └─────────────────────────────────────────────────────┘   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      dbt + Analytics                         │
-│              (No PHI in output models)                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Sigma / Tableau                           │
-│               Aggregate reports only                         │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph HEALTH [" "]
+        direction TB
+        
+        subgraph SRC ["Healthcare Sources"]
+            direction LR
+            EH["EHR<br>(Epic/Cerner)"]
+            PM["Practice<br>Management"]
+            BI["Billing<br>System"]
+            CRM["CRM<br>(Salesforce)"]
+        end
+        
+        INT["HIPAA-Compliant Integration<br>Fivetran (BAA) / Healthcare APIs"]
+        
+        subgraph WH ["Snowflake Healthcare & Life Sciences<br>(BAA, HIPAA-ready)"]
+            direction TB
+            DIL["De-identification Layer<br>PHI → Tokenized/Hashed identifiers"]
+        end
+        
+        DBT["dbt + Analytics<br>(No PHI in output models)"]
+        REP["Sigma / Tableau<br>Aggregate reports only"]
+        
+        SRC --> INT
+        INT --> WH
+        WH --> DBT
+        DBT --> REP
+    end
 ```
 
 **De-identification Strategy:**

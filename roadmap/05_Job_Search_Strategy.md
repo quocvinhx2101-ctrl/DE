@@ -75,28 +75,16 @@ Note: Networking referrals increase ratios by 3-5x
 
 ### DE Resume Structure
 
-```
-┌─────────────────────────────────────┐
-│ Name + Contact + LinkedIn + GitHub  │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│ Summary (2-3 lines, skip if junior) │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│ Technical Skills (grouped)          │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│ Experience (most recent first)      │
-│ • Company - Role - Duration         │
-│ • 3-5 bullet points with metrics    │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│ Projects (if junior/mid)            │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│ Education + Certifications          │
-└─────────────────────────────────────┘
-```
+> **DE Resume Structure**
+> 
+> 1. **Header:** Name + Contact + LinkedIn + GitHub
+> 2. **Summary:** 2-3 lines (skip if junior)
+> 3. **Technical Skills:** Grouped by category (Languages, Cloud, Tools, etc.)
+> 4. **Experience:** Most recent first
+>    - Company - Role - Duration
+>    - 3-5 bullet points with metrics (X-Y-Z format)
+> 5. **Projects:** If junior/mid, highlight key DE projects
+> 6. **Education & Certifications:** Relevant degrees and certs
 
 ### Strong Bullet Points (X-Y-Z Format)
 

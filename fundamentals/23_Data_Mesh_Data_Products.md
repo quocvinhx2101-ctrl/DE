@@ -42,22 +42,34 @@ Orders Team PM: "We have 4 backend engineers who could build this themselves, bu
 
 ### Scene 3: The Real Problem
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CENTRALIZED DATA TEAM                        │
-│                                                                 │
-│  10 domain teams  ──►  4 data engineers  ──►  data products     │
-│  (requests)            (bottleneck)           (late, wrong)     │
-│                                                                 │
-│  Problems:                                                      │
-│  1. 3-week queue for every request                              │
-│  2. DEs don't understand domain context                         │
-│     (What is "qualified lead"? Each domain defines differently) │
-│  3. DEs build what they THINK domains want, not what they need  │
-│  4. Domains have no ownership — "it's the data team's problem"  │
-│  5. Does not scale: 10 domains × 5 requests/month = 50 tasks   │
-│     for 4 DEs = perpetual backlog                               │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph TEAM ["CENTRALIZED DATA TEAM (The Bottleneck)"]
+        direction LR
+        DOMAINS["10 Domain Teams<br>(Requests)"]
+        DES["4 Data Engineers<br>(Bottleneck)"]
+        PRODS["Data Products<br>(Late, wrong)"]
+        
+        DOMAINS -->|"Send tickets"| DES
+        DES -->|"Deliver after 3 weeks"| PRODS
+    end
+
+    subgraph PROBS ["Problems"]
+        direction TB
+        P1["1. 3-week queue for every request"]
+        P2["2. DEs don't understand domain context<br>(What is 'qualified lead'?)"]
+        P3["3. DEs build what they THINK domains want"]
+        P4["4. Domains have no ownership"]
+        P5["5. Does not scale (10 domains × 5 reqs = backlog)"]
+        
+        P1 ~~~ P2 ~~~ P3 ~~~ P4 ~~~ P5
+    end
+    
+    TEAM --> PROBS
+    
+    style TEAM fill:#ffebee,stroke:#e53935
+    style PROBS fill:#fff3e0,stroke:#fb8c00
+    classDef default fill:#fae3e3,stroke:#ef5350;
 ```
 
 ### Data Mesh says: Give each domain ownership of their own data

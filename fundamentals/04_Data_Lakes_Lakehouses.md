@@ -924,11 +924,7 @@ flowchart TB
     style DL fill:#d5f5e3,stroke:#27ae60
     style CS fill:#fdebd0,stroke:#e67e22
 ```
-```
-
 ### 7.2 Snowflake + Iceberg
-
-```
 Components:
 - Snowflake (compute + some storage)
 - Apache Iceberg (table format)
@@ -956,11 +952,9 @@ flowchart TB
     style IT fill:#fdebd0,stroke:#e67e22
     style OS fill:#fadbd8,stroke:#e74c3c
 ```
-```
 
 ### 7.3 AWS Lake Formation + Athena
 
-```
 Components:
 - S3 (storage)
 - Glue Catalog (metadata)
@@ -990,11 +984,8 @@ flowchart TB
     style GC fill:#fae5d3,stroke:#e67e22
     style S3 fill:#fadbd8,stroke:#e74c3c
 ```
-```
-
 ### 7.4 Open Source Lakehouse
 
-```
 Components:
 - MinIO (S3-compatible storage)
 - Apache Spark (processing)
@@ -1038,9 +1029,6 @@ flowchart TB
     style ST fill:#fdebd0,stroke:#e67e22
     style ORCH fill:#fadbd8,stroke:#e74c3c
 ```
-```
-
----
 
 ## PHẦN 8: BEST PRACTICES
 
@@ -1091,9 +1079,10 @@ Table naming:
 - Gold: dim_*, fact_*, agg_*
 ```
 
+
+
 ### 8.3 Performance Optimization
 
-```
 Checklist:
 □ Use columnar formats (Parquet, Delta, Iceberg)
 □ Partition by frequently filtered columns
@@ -1103,11 +1092,9 @@ Checklist:
 □ Enable caching where appropriate
 □ Monitor and tune query patterns
 □ Use approximate queries for exploration
-```
 
 ### 8.4 Cost Optimization
 
-```
 Storage:
 □ Use lifecycle policies (move to cheaper tiers)
 □ Delete unused/temporary data
@@ -1125,15 +1112,12 @@ Data Transfer:
 □ Keep compute and storage in same region
 □ Batch API calls
 □ Use compression for transfers
-```
 
----
 
 ## PHẦN 9: MIGRATION STRATEGIES
 
 ### 9.1 From Data Warehouse to Lakehouse
 
-```
 Phase 1: Parallel Run
 - Set up Lakehouse alongside DWH
 - Replicate DWH data to Lakehouse Bronze
@@ -1150,11 +1134,11 @@ Phase 3: Cutover
 - Migrate remaining workloads
 - Decommission DWH
 - Optimize Lakehouse
-```
+
 
 ### 9.2 From Hadoop to Cloud Lakehouse
 
-```
+
 Assessment:
 - Inventory all datasets and pipelines
 - Identify dependencies
@@ -1173,9 +1157,6 @@ Validation:
 - Validate aggregates match
 - Test all queries
 - Performance benchmarking
-```
-
----
 
 ## PHẦN 10: OPEN TABLE FORMATS DEEP DIVE
 
@@ -1183,7 +1164,6 @@ Validation:
 
 **Architecture:**
 
-```
 Delta Lake layer on top of Parquet:
 
 data/
@@ -1195,7 +1175,6 @@ data/
 ├── part-00000-....parquet         # Data files
 ├── part-00001-....parquet
 └── part-00002-....parquet
-```
 
 ```python
 from delta import DeltaTable
@@ -1535,34 +1514,25 @@ consumers:
 
 ### 12.1 Encryption Strategies
 
-```
-Encryption Layers:
+**Encryption Layers:**
 
-1. ENCRYPTION AT REST
-   ┌─────────────────────────────────────────────┐
-   │  Server-Side Encryption (SSE)               │
-   │  ├── SSE-S3: Amazon-managed keys            │
-   │  ├── SSE-KMS: AWS KMS managed keys          │
-   │  └── SSE-C: Customer-provided keys          │
-   │                                              │
-   │  Client-Side Encryption (CSE)               │
-   │  └── Data encrypted before upload           │
-   └─────────────────────────────────────────────┘
+**1. ENCRYPTION AT REST**
+* **Server-Side Encryption (SSE)**
+    * SSE-S3: Amazon-managed keys
+    * SSE-KMS: AWS KMS managed keys
+    * SSE-C: Customer-provided keys
+* **Client-Side Encryption (CSE)**
+    * Data encrypted before upload
 
-2. ENCRYPTION IN TRANSIT
-   ┌─────────────────────────────────────────────┐
-   │  TLS 1.2+ for all API calls                 │
-   │  VPC endpoints (no public internet)         │
-   │  Private links between services             │
-   └─────────────────────────────────────────────┘
+**2. ENCRYPTION IN TRANSIT**
+* TLS 1.2+ for all API calls
+* VPC endpoints (no public internet)
+* Private links between services
 
-3. COLUMN-LEVEL ENCRYPTION
-   ┌─────────────────────────────────────────────┐
-   │  Parquet column encryption (modular)        │
-   │  Different keys per column                  │
-   │  Encrypt PII, leave analytics columns open  │
-   └─────────────────────────────────────────────┘
-```
+**3. COLUMN-LEVEL ENCRYPTION**
+* Parquet column encryption (modular)
+* Different keys per column
+* Encrypt PII, leave analytics columns open
 
 ```python
 # Parquet modular encryption (Apache Parquet 1.12+)
@@ -1593,34 +1563,53 @@ kms_config = KmsConnectionConfig(
 
 ### 12.2 Network Security
 
-```
-Network Isolation Architecture:
+```mermaid
+flowchart TD
+    subgraph VPC [" "]
+        direction TB
+        VPC_TITLE["VPC (Virtual Private Cloud)"]
+        style VPC_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph COMPUTE [" "]
+            direction TB
+            C_TITLE["Private Subnet (Compute)"]
+            style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            SPARK["Spark Cluster"]
+            AIRFLOW["Airflow Workers"]
+            C_TITLE ~~~ SPARK
+            C_TITLE ~~~ AIRFLOW
+        end
 
-┌──────────────────────────────────────────────────┐
-│                   VPC                             │
-│  ┌──────────────────┐  ┌──────────────────┐      │
-│  │  Private Subnet  │  │  Private Subnet  │      │
-│  │  (Compute)       │  │  (Storage)       │      │
-│  │                  │  │                  │      │
-│  │  ┌────────────┐  │  │  ┌────────────┐  │      │
-│  │  │ Spark      │  │  │  │ S3 Bucket  │  │      │
-│  │  │ Cluster    │──┼──┼──│ (Data Lake)│  │      │
-│  │  └────────────┘  │  │  └────────────┘  │      │
-│  │                  │  │                  │      │
-│  │  ┌────────────┐  │  │  ┌────────────┐  │      │
-│  │  │ Airflow    │  │  │  │ Metastore  │  │      │
-│  │  │ Workers    │──┼──┼──│ (Catalog)  │  │      │
-│  │  └────────────┘  │  │  └────────────┘  │      │
-│  └──────────────────┘  └──────────────────┘      │
-│          │                                        │
-│  ┌───────┴──────────────────────────────┐        │
-│  │  VPC Endpoints                       │        │
-│  │  ├── S3 Gateway Endpoint             │        │
-│  │  ├── Glue Interface Endpoint         │        │
-│  │  ├── KMS Interface Endpoint          │        │
-│  │  └── STS Interface Endpoint          │        │
-│  └──────────────────────────────────────┘        │
-└──────────────────────────────────────────────────┘
+        subgraph STORAGE [" "]
+            direction TB
+            S_TITLE["Private Subnet (Storage)"]
+            style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            S3["S3 Bucket (Data Lake)"]
+            META["Metastore (Catalog)"]
+            S_TITLE ~~~ S3
+            S_TITLE ~~~ META
+        end
+        
+        subgraph ENDPOINTS [" "]
+            direction TB
+            E_TITLE["VPC Endpoints"]
+            style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            E_LIST["- S3 Gateway Endpoint<br>- Glue Interface Endpoint<br>- KMS Interface Endpoint<br>- STS Interface Endpoint"]
+            E_TITLE ~~~ E_LIST
+        end
+        
+        VPC_TITLE ~~~ COMPUTE
+        COMPUTE ~~~ ENDPOINTS
+    end
+    
+    SPARK <--> S3
+    AIRFLOW <--> META
+    COMPUTE --> ENDPOINTS
+    
+    style VPC fill:#f8f9fa,stroke:#adb5bd,stroke-width:2px
+    style COMPUTE fill:#e3f2fd,stroke:#90caf9
+    style STORAGE fill:#e8f5e9,stroke:#a5d6a7
+    style ENDPOINTS fill:#fff3e0,stroke:#ffcc80
 ```
 
 ### 12.3 Access Control Patterns

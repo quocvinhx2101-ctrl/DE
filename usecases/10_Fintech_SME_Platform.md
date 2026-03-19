@@ -62,37 +62,29 @@
 
 **Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Transaction Sources                         │
-├──────────────┬──────────────┬──────────────┬────────────────┤
-│   Stripe     │   Plaid      │   Banking    │   Internal     │
-│  (Payments)  │  (Banking)   │    APIs      │   Ledger       │
-└──────┬───────┴──────┬───────┴──────┬───────┴───────┬────────┘
-       │              │              │               │
-       ▼              ▼              ▼               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Fivetran (Encrypted)                        │
-│             + Custom API connectors                          │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 Snowflake (SOC2 Compliant)                   │
-│           With column-level encryption + masking             │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                          dbt                                 │
-│          Financial models + Compliance checks                │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Sigma / Looker                            │
-│              Finance + Ops Dashboards                        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph FINTECH [" "]
+        direction TB
+        
+        subgraph SRC ["Transaction Sources"]
+            direction LR
+            ST["Stripe<br>(Payments)"]
+            PL["Plaid<br>(Banking)"]
+            BA["Banking<br>APIs"]
+            IL["Internal<br>Ledger"]
+        end
+        
+        EL["Fivetran (Encrypted)<br>+ Custom API connectors"]
+        WH["Snowflake (SOC2 Compliant)<br>With column-level encryption + masking"]
+        DBT["dbt<br>Financial models + Compliance checks"]
+        BI["Sigma / Looker<br>Finance + Ops Dashboards"]
+        
+        SRC --> EL
+        EL --> WH
+        WH --> DBT
+        DBT --> BI
+    end
 ```
 
 **Security Configuration:**
@@ -1152,16 +1144,15 @@ from loan_risk
 
 ### Recommended Architecture
 
-```
-Data Sources → Fivetran (encrypted) → Snowflake Enterprise
-                                          ↓
-                                      dbt Cloud
-                                          ↓
-                              ┌───────────┴───────────┐
-                              ↓                       ↓
-                    Sigma (Analytics)          Tableau (Finance)
-                              ↓                       ↓
-                         Analysts              Finance Team
+```mermaid
+flowchart TD
+    DS["Data Sources"] --> FT["Fivetran (encrypted)"]
+    FT --> SF["Snowflake Enterprise"]
+    SF --> DBT["dbt Cloud"]
+    DBT --> SG["Sigma (Analytics)"]
+    DBT --> TB["Tableau (Finance)"]
+    SG --> AN["Analysts"]
+    TB --> FI["Finance Team"]
 ```
 
 ### Cost Estimate

@@ -85,32 +85,33 @@ Apache Spark là một **unified analytics engine** cho large-scale data process
 
 ### Spark Ecosystem
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Apache Spark Ecosystem                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │
-│  │  Spark SQL  │ │  Streaming  │ │   MLlib     │ │  GraphX     │   │
-│  │  DataFrames │ │  Structured │ │  Machine    │ │  Graph      │   │
-│  │             │ │  Streaming  │ │  Learning   │ │  Processing │   │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Spark Core (RDD)                        │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │               Cluster Managers                               │    │
-│  │   Standalone  |  YARN  |  Kubernetes  |  Mesos              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │               Storage Systems                                │    │
-│  │   HDFS | S3 | GCS | Azure Blob | Local FS                   │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ECO [" "]
+        direction TB
+        TITLE["Apache Spark Ecosystem"]
+        style TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SQL["Spark SQL<br>DataFrames"]
+        STR["Streaming<br>Structured Streaming"]
+        ML["MLlib<br>Machine Learning"]
+        GX["GraphX<br>Graph Processing"]
+        
+        CORE["Spark Core (RDD)"]
+        CM["Cluster Managers<br>Standalone | YARN | Kubernetes | Mesos"]
+        ST["Storage Systems<br>HDFS | S3 | GCS | Azure Blob | Local FS"]
+        
+        TITLE ~~~ SQL ~~~ STR ~~~ ML ~~~ GX
+        
+        SQL & STR & ML & GX --> CORE
+        CORE --> CM
+        CM --> ST
+    end
+    
+    style ECO fill:#f5f5f5,stroke:#9e9e9e
+    style CORE fill:#fff9c4,stroke:#fbc02d
+    style CM fill:#e3f2fd,stroke:#1e88e5
+    style ST fill:#e8f5e9,stroke:#4caf50
 ```
 
 ---
@@ -119,122 +120,109 @@ Apache Spark là một **unified analytics engine** cho large-scale data process
 
 ### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Spark Cluster Architecture                      │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                      Driver Program                             │ │
-│  │  ┌─────────────────────────────────────────────────────────┐   │ │
-│  │  │                   SparkContext                           │   │ │
-│  │  │  • Creates DAG of operations                            │   │ │
-│  │  │  • Schedules tasks                                      │   │ │
-│  │  │  • Coordinates executors                                │   │ │
-│  │  │  • Broadcasts variables                                 │   │ │
-│  │  └─────────────────────────────────────────────────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    Cluster Manager                              │ │
-│  │              (Standalone / YARN / K8s / Mesos)                 │ │
-│  │  • Resource allocation                                         │ │
-│  │  • Executor lifecycle management                               │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                        Executors                                │ │
-│  │                                                                 │ │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │ │
-│  │  │   Executor 1    │  │   Executor 2    │  │   Executor N    │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │ │ │
-│  │  │  │  Task 1   │  │  │  │  Task 3   │  │  │  │  Task 5   │  │ │ │
-│  │  │  │  Task 2   │  │  │  │  Task 4   │  │  │  │  Task 6   │  │ │ │
-│  │  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  [Cache/Memory] │  │  [Cache/Memory] │  │  [Cache/Memory] │ │ │
-│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘ │ │
-│  │                                                                 │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ARCH [" "]
+        direction TB
+        TITLE["Spark Cluster Architecture"]
+        style TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph DRIVER [" "]
+            direction TB
+            D_TITLE["Driver Program"]
+            style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            SC["SparkContext<br>• Creates DAG of ops<br>• Schedules tasks<br>• Coordinates executors"]
+            D_TITLE ~~~ SC
+        end
+        
+        CM["Cluster Manager<br>(Standalone / YARN / K8s / Mesos)<br>• Resource allocation<br>• Lifecycle mgmt"]
+        
+        subgraph EXECS [" "]
+            direction LR
+            E_TITLE["Executors"]
+            style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            E1["Executor 1<br>[Cache/Memory]<br>Task 1 | Task 2"]
+            E2["Executor 2<br>[Cache/Memory]<br>Task 3 | Task 4"]
+            EN["Executor N<br>[Cache/Memory]<br>Task 5 | Task 6"]
+            
+            E_TITLE ~~~ E1 ~~~ E2 ~~~ EN
+        end
+        
+        TITLE ~~~ DRIVER
+        DRIVER --> CM --> EXECS
+    end
 ```
 
 ### Job Execution Flow
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Spark Job Execution                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  User Code                                                           │
-│      │                                                               │
-│      ▼                                                               │
-│  ┌──────────────┐                                                    │
-│  │   Job        │  Triggered by action (collect, save, show)        │
-│  │              │  A job = one action                               │
-│  └──────┬───────┘                                                    │
-│         │                                                            │
-│         ▼                                                            │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                      Stages                                   │   │
-│  │  Split by shuffle boundaries                                  │   │
-│  │                                                               │   │
-│  │  Stage 1 (Read + Filter + Map)  ──► Stage 2 (GroupBy + Agg) │   │
-│  │           │                                 │                │   │
-│  │       No shuffle                        Shuffle              │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│         │                                                            │
-│         ▼                                                            │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                      Tasks                                    │   │
-│  │  One task per partition per stage                            │   │
-│  │                                                               │   │
-│  │  Stage 1: [T1] [T2] [T3] [T4] ─► Stage 2: [T1] [T2] [T3]    │   │
-│  │  (4 partitions)                   (3 partitions)             │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph EXEC [" "]
+        direction TB
+        TITLE["Spark Job Execution"]
+        style TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        CODE["User Code"]
+        JOB["Job<br>Triggered by action (collect, save, show)<br>A job = one action"]
+        
+        subgraph STAGES [" "]
+            direction LR
+            S_TITLE["Stages<br>Split by shuffle boundaries"]
+            style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            S1["Stage 1<br>(Read + Filter + Map)<br>No shuffle"]
+            S2["Stage 2<br>(GroupBy + Agg)<br>Shuffle"]
+            
+            S_TITLE ~~~ S1 --> S2
+        end
+        
+        subgraph TASKS [" "]
+            direction LR
+            T_TITLE["Tasks<br>One task per partition per stage"]
+            style T_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            T1["Stage 1<br>[T1] [T2] [T3] [T4]<br>(4 partitions)"]
+            T2["Stage 2<br>[T1] [T2] [T3]<br>(3 partitions)"]
+            
+            T_TITLE ~~~ T1 --> T2
+        end
+        
+        TITLE ~~~ CODE
+        CODE --> JOB --> STAGES --> TASKS
+    end
+    
+    style EXEC fill:#f3e5f5,stroke:#ab47bc
 ```
 
 ### Memory Management
 
-```
-Executor Memory Layout:
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Executor Memory (spark.executor.memory)          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │               Reserved Memory (300MB fixed)                  │    │
-│  │               System overhead                                │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                User Memory (1 - spark.memory.fraction)       │    │
-│  │                Default: 40%                                  │    │
-│  │                • User data structures                        │    │
-│  │                • Spark internal metadata                     │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │            Spark Memory (spark.memory.fraction = 0.6)        │    │
-│  │                                                              │    │
-│  │  ┌────────────────────────┐ ┌────────────────────────┐      │    │
-│  │  │   Storage Memory       │ │   Execution Memory     │      │    │
-│  │  │   (cached RDDs,        │ │   (shuffles, joins,    │      │    │
-│  │  │    broadcast vars)     │ │    sorts, aggregations)│      │    │
-│  │  │                        │ │                        │      │    │
-│  │  │   ◄────────────────────┼─┼────────────────────►   │      │    │
-│  │  │        Unified Memory (can borrow from each other)│      │    │
-│  │  └────────────────────────┘ └────────────────────────┘      │    │
-│  │  storageFraction = 0.5 (default)                            │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MEM [" "]
+        direction TB
+        TITLE["Executor Memory (spark.executor.memory)"]
+        style TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        RES["Reserved Memory (300MB fixed)<br>System overhead"]
+        USR["User Memory (1 - spark.memory.fraction)<br>Default: 40%<br>• User data structures<br>• Internal metadata"]
+        
+        subgraph SMEM [" "]
+            direction TB
+            S_TITLE["Spark Memory (spark.memory.fraction = 0.6)<br>storageFraction = 0.5 (default)"]
+            style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            subgraph UNIFIED ["Unified Memory (can borrow from each other)"]
+                direction LR
+                STO["Storage Memory<br>(cached RDDs, broadcast vars)"]
+                EXE["Execution Memory<br>(shuffles, joins, sorts, aggregations)"]
+                STO <--> EXE
+            end
+            S_TITLE ~~~ UNIFIED
+        end
+        
+        TITLE ~~~ RES ~~~ USR ~~~ SMEM
+    end
 ```
 
 ---
@@ -249,107 +237,90 @@ RDD Properties:
 • Distributed - Partitioned across nodes
 • Resilient - Can be recomputed from lineage
 
-RDD Lineage:
-┌────────┐     ┌────────┐     ┌────────┐     ┌────────┐
-│ textFile │───►│ filter  │───►│  map    │───►│ reduce │
-│  (RDD1)  │    │  (RDD2) │    │  (RDD3) │    │(Action)│
-└────────┘     └────────┘     └────────┘     └────────┘
-                    │              │
-            Transformations    Transformations
-               (lazy)            (lazy)
+```mermaid
+flowchart LR
+    R1["textFile<br>(RDD1)"]
+    R2["filter<br>(RDD2)"]
+    R3["map<br>(RDD3)"]
+    ACT["reduce<br>(Action)"]
+    
+    R1 -->|"Transformations<br>(lazy)"| R2
+    R2 -->|"Transformations<br>(lazy)"| R3
+    R3 --> ACT
 ```
 
 ### 2. DataFrame & Dataset
 
-```
-API Evolution:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Spark 1.x: RDD ──► DataFrame (SchemaRDD)                           │
-│                                                                      │
-│  Spark 2.x: RDD ──► DataFrame = Dataset[Row]                        │
-│             RDD ──► Dataset[T] (typed)                              │
-│                                                                      │
-│  Spark 3.x+: Same, with improvements                                │
-│                                                                      │
-│  DataFrame:                                                          │
-│  • Untyped (Row objects)                                            │
-│  • Schema-aware                                                      │
-│  • Optimized by Catalyst                                            │
-│  • Python, R, SQL friendly                                          │
-│                                                                      │
-│  Dataset[T]:                                                         │
-│  • Strongly typed                                                    │
-│  • Compile-time type safety                                         │
-│  • Scala/Java only                                                  │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph API [" "]
+        direction TB
+        A_TITLE["API Evolution"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        S1["Spark 1.x: RDD ──► DataFrame (SchemaRDD)"]
+        S2["Spark 2.x: RDD ──► DataFrame = Dataset[Row]<br>           RDD ──► Dataset[T] (typed)"]
+        S3["Spark 3.x+: Same, with improvements"]
+        
+        S1 ~~~ S2 ~~~ S3
+        
+        DF["DataFrame:<br>• Untyped (Row objects)<br>• Schema-aware<br>• Optimized by Catalyst<br>• Python, R, SQL friendly"]
+        DS["Dataset[T]:<br>• Strongly typed<br>• Compile-time type safety<br>• Scala/Java only"]
+        
+        style DF fill:none,stroke:none,text-align:left
+        style DS fill:none,stroke:none,text-align:left
+        
+        S3 ~~~ DF ~~~ DS
+    end
 ```
 
 ### 3. Catalyst Optimizer
 
-```
-Query Optimization Pipeline:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  SQL/DataFrame/Dataset Query                                         │
-│         │                                                            │
-│         ▼                                                            │
-│  ┌──────────────┐                                                    │
-│  │  Unresolved  │  Parsing                                          │
-│  │ Logical Plan │                                                    │
-│  └──────┬───────┘                                                    │
-│         │ Analysis (resolve columns, tables)                        │
-│         ▼                                                            │
-│  ┌──────────────┐                                                    │
-│  │   Analyzed   │                                                    │
-│  │ Logical Plan │                                                    │
-│  └──────┬───────┘                                                    │
-│         │ Optimization (predicate pushdown, etc)                    │
-│         ▼                                                            │
-│  ┌──────────────┐                                                    │
-│  │  Optimized   │                                                    │
-│  │ Logical Plan │                                                    │
-│  └──────┬───────┘                                                    │
-│         │ Physical Planning                                         │
-│         ▼                                                            │
-│  ┌──────────────┐                                                    │
-│  │   Physical   │  Choose best plan                                 │
-│  │    Plans     │  (cost-based)                                     │
-│  └──────┬───────┘                                                    │
-│         │ Code Generation (Tungsten)                                │
-│         ▼                                                            │
-│  ┌──────────────┐                                                    │
-│  │     RDDs     │  Execute on cluster                               │
-│  └──────────────┘                                                    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CAT [" "]
+        direction TB
+        C_TITLE["Query Optimization Pipeline"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        IN["SQL/DataFrame/Dataset Query"]
+        U_LOG["Unresolved<br>Logical Plan"]
+        A_LOG["Analyzed<br>Logical Plan"]
+        O_LOG["Optimized<br>Logical Plan"]
+        P_PLAN["Physical<br>Plans"]
+        RDD["RDDs"]
+        
+        IN --> U_LOG
+        U_LOG -->|Parsing / Analysis<br>resolve columns, tables| A_LOG
+        A_LOG -->|Optimization<br>predicate pushdown, etc| O_LOG
+        O_LOG -->|Physical Planning<br>Choose best plan cost-based| P_PLAN
+        P_PLAN -->|Code Generation<br>Tungsten| RDD
+        
+        OUT["Execute on cluster"]
+        style OUT fill:none,stroke:none
+        RDD --> OUT
+    end
 ```
 
 ### 4. Adaptive Query Execution (AQE)
 
-```
-AQE Features (Spark 3.0+):
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. Dynamic Coalescing of Shuffle Partitions                        │
-│     Before: 200 small partitions (default)                          │
-│     After:  Fewer, larger partitions based on data size             │
-│                                                                      │
-│  2. Switching Join Strategies at Runtime                            │
-│     Plan: Sort-Merge Join                                           │
-│     Runtime: Table is small → Switch to Broadcast Join              │
-│                                                                      │
-│  3. Skew Join Optimization                                          │
-│     Detect skewed partitions → Split into smaller partitions        │
-│                                                                      │
-│  Enable:                                                             │
-│  spark.sql.adaptive.enabled = true (default in 3.2+)                │
-│  spark.sql.adaptive.coalescePartitions.enabled = true               │
-│  spark.sql.adaptive.skewJoin.enabled = true                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+> **AQE Features (Spark 3.0+)**
+> 
+> 1. **Dynamic Coalescing of Shuffle Partitions**
+>    * **Before:** 200 small partitions (default)
+>    * **After:** Fewer, larger partitions based on data size
+> 
+> 2. **Switching Join Strategies at Runtime**
+>    * **Plan:** Sort-Merge Join
+>    * **Runtime:** Table is small → Switch to Broadcast Join
+> 
+> 3. **Skew Join Optimization**
+>    * Detect skewed partitions → Split into smaller partitions
+> 
+> **Enable:**
+> * `spark.sql.adaptive.enabled = true` (default in 3.2+)
+> * `spark.sql.adaptive.coalescePartitions.enabled = true`
+> * `spark.sql.adaptive.skewJoin.enabled = true`
 
 ---
 
@@ -442,51 +413,64 @@ df_rolling = df \
 
 ### Architecture
 
-```
-Structured Streaming Model:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Input Stream ──► Unbounded Table                                   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │   Time    │ Event ID │  User  │ Amount │                    │    │
-│  ├───────────┼──────────┼────────┼────────┤                    │    │
-│  │ 10:00:01  │   e1     │  u1    │  100   │                    │    │
-│  │ 10:00:02  │   e2     │  u2    │  200   │  ◄── Unbounded     │    │
-│  │ 10:00:03  │   e3     │  u1    │  150   │      Input Table   │    │
-│  │   ...     │   ...    │  ...   │  ...   │                    │    │
-│  │           │          │        │        │                    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  Query (same as batch!):                                            │
-│  df.groupBy("user").agg(sum("amount"))                              │
-│                                                                      │
-│  Output (updated as new data arrives):                              │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │   User    │  Total  │                                        │    │
-│  ├───────────┼─────────┤                                        │    │
-│  │    u1     │   250   │  ◄── Result Table                      │    │
-│  │    u2     │   200   │      (continuously updated)            │    │
-│  └───────────┴─────────┘                                        │    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SS [" "]
+        direction TB
+        S_TITLE["Structured Streaming Model"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        IN["Input Stream ──► Unbounded Table"]
+        
+        subgraph TABLE [" "]
+            direction TB
+            T_HDR["| Time | Event ID | User | Amount |"]
+            T_1["| 10:00:01 | e1 | u1 | 100 |"]
+            T_2["| 10:00:02 | e2 | u2 | 200 | ◄── Unbounded Input Table"]
+            T_3["| 10:00:03 | e3 | u1 | 150 |"]
+            T_4["| ... | ... | ... | ... |"]
+            
+            T_HDR ~~~ T_1 ~~~ T_2 ~~~ T_3 ~~~ T_4
+        end
+        style TABLE fill:none,stroke:none
+        
+        IN --> TABLE
+        
+        Q["Query (same as batch!):<br>df.groupBy(user).agg(sum(amount))"]
+        
+        TABLE --> Q
+        
+        OUT["Output (updated as new data arrives):"]
+        
+        subgraph RES [" "]
+            direction TB
+            R_HDR["| User | Total |"]
+            R_1["| u1 | 250 | ◄── Result Table"]
+            R_2["| u2 | 200 | (continuously updated)"]
+            
+            R_HDR ~~~ R_1 ~~~ R_2
+        end
+        style RES fill:none,stroke:none
+        
+        Q --> OUT --> RES
+    end
 ```
 
 ### Output Modes
 
-```
-1. Complete Mode
-   Output entire result table
-   Use for: Aggregations
-   
-2. Append Mode
-   Output only new rows
-   Use for: Simple transformations, no aggregations
-   
-3. Update Mode
-   Output only updated rows
-   Use for: Aggregations when only changes matter
-```
+> **Output Modes**
+> 
+> 1. **Complete Mode**
+>    * Output entire result table
+>    * Use for: Aggregations
+>    
+> 2. **Append Mode**
+>    * Output only new rows
+>    * Use for: Simple transformations, no aggregations
+>    
+> 3. **Update Mode**
+>    * Output only updated rows
+>    * Use for: Aggregations when only changes matter
 
 ### Streaming Example
 
@@ -565,31 +549,34 @@ query.awaitTermination()
 
 ### Architecture (Spark 3.4+)
 
-```
-Spark Connect Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────┐                   ┌─────────────────────────┐  │
-│  │  Client App     │                   │    Spark Server         │  │
-│  │  (Python/Scala) │                   │                         │  │
-│  │                 │    gRPC/Proto     │  ┌─────────────────┐    │  │
-│  │  ┌───────────┐  │ ◄───────────────► │  │  Spark Session  │    │  │
-│  │  │  Spark    │  │                   │  │  (per client)   │    │  │
-│  │  │  Connect  │  │                   │  └─────────────────┘    │  │
-│  │  │  Client   │  │                   │           │             │  │
-│  │  └───────────┘  │                   │           ▼             │  │
-│  │                 │                   │  ┌─────────────────┐    │  │
-│  └─────────────────┘                   │  │    Executors    │    │  │
-│                                        │  └─────────────────┘    │  │
-│                                        └─────────────────────────┘  │
-│                                                                      │
-│  Benefits:                                                           │
-│  • Thin client (no Spark in client)                                 │
-│  • Language flexibility                                             │
-│  • Better resource management                                       │
-│  • Interactive debugging                                            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph CONN [" "]
+        direction TB
+        C_TITLE["Spark Connect Architecture (Spark 3.4+)"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CLIENT [" "]
+            direction TB
+            CLI["Client App<br>(Python/Scala)"]
+            SC["Spark<br>Connect<br>Client"]
+            CLI --- SC
+        end
+        
+        subgraph SERVER ["Spark Server"]
+            direction TB
+            SS["Spark Session<br>(per client)"]
+            EX["Executors"]
+            SS --> EX
+        end
+        
+        SC <-->|"gRPC/Proto"| SS
+        
+        BEN["Benefits:<br>• Thin client (no Spark in client)<br>• Language flexibility<br>• Better resource management<br>• Interactive debugging"]
+        style BEN fill:none,stroke:none,text-align:left
+        
+        SERVER ~~~ BEN
+    end
 ```
 
 ### Using Spark Connect
@@ -763,66 +750,68 @@ model.write().overwrite().save("s3://bucket/models/rf_model/")
 
 ### 1. Data Lake Analytics
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Enterprise Data Lake with Spark                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Raw Zone              Bronze              Silver             Gold   │
-│  ┌──────────┐       ┌──────────┐       ┌──────────┐       ┌──────┐ │
-│  │ S3/HDFS  │──────►│  Spark   │──────►│  Spark   │──────►│ Spark│ │
-│  │ (JSON,   │ Ingest│ Cleansed │Quality│ Enriched │ Agg   │ Marts│ │
-│  │  CSV)    │       │ Iceberg  │Checks │ Iceberg  │       │      │ │
-│  └──────────┘       └──────────┘       └──────────┘       └──────┘ │
-│                                                                      │
-│  Technologies:                                                       │
-│  • Spark for all transformations                                    │
-│  • Iceberg/Delta for storage                                        │
-│  • Great Expectations for quality                                   │
-│  • Airflow for orchestration                                        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph DL [" "]
+        direction TB
+        D_TITLE["Enterprise Data Lake with Spark"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph ZONES [" "]
+            direction LR
+            R["Raw Zone<br>S3/HDFS<br>(JSON, CSV)"]
+            B["Bronze<br>Spark Ingest<br>Cleansed Iceberg"]
+            S["Silver<br>Spark Quality Checks<br>Enriched Iceberg"]
+            G["Gold<br>Spark Agg<br>Marts"]
+            
+            R --> B --> S --> G
+        end
+        
+        TECH["Technologies:<br>• Spark for all transformations<br>• Iceberg/Delta for storage<br>• Great Expectations for quality<br>• Airflow for orchestration"]
+        style TECH fill:none,stroke:none,text-align:left
+        
+        ZONES ~~~ TECH
+    end
 ```
 
 ### 2. Real-time + Batch (Lambda Architecture)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Lambda Architecture                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌───────────┐                                                      │
-│  │   Kafka   │                                                      │
-│  │  (events) │                                                      │
-│  └─────┬─────┘                                                      │
-│        │                                                             │
-│   ┌────┴────┐                                                       │
-│   │         │                                                       │
-│   ▼         ▼                                                       │
-│ Speed    Batch                                                       │
-│ Layer    Layer                                                       │
-│                                                                      │
-│ ┌─────────────┐     ┌─────────────┐                                │
-│ │  Structured │     │  Spark      │                                │
-│ │  Streaming  │     │  Batch Jobs │                                │
-│ │ (real-time) │     │ (hourly)    │                                │
-│ └──────┬──────┘     └──────┬──────┘                                │
-│        │                   │                                        │
-│        ▼                   ▼                                        │
-│ ┌─────────────┐     ┌─────────────┐                                │
-│ │  Real-time  │     │  Historical │                                │
-│ │    View     │     │    View     │                                │
-│ │  (Redis)    │     │  (Iceberg)  │                                │
-│ └──────┬──────┘     └──────┬──────┘                                │
-│        │                   │                                        │
-│        └─────────┬─────────┘                                        │
-│                  ▼                                                   │
-│           ┌─────────────┐                                           │
-│           │  Serving    │                                           │
-│           │   Layer     │                                           │
-│           └─────────────┘                                           │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph LAMBDA [" "]
+        direction TB
+        TITLE["Lambda Architecture"]
+        style TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        K["Kafka<br>(events)"]
+        
+        subgraph LAYERS [" "]
+            direction LR
+            subgraph SPEED ["Speed Layer"]
+                direction TB
+                SS["Structured Streaming<br>(real-time)"]
+                RV["Real-time View<br>(Redis)"]
+                SS --> RV
+            end
+            
+            subgraph BATCH ["Batch Layer"]
+                direction TB
+                SB["Spark Batch Jobs<br>(hourly)"]
+                HV["Historical View<br>(Iceberg)"]
+                SB --> HV
+            end
+        end
+        
+        SRV["Serving Layer"]
+        
+        TITLE ~~~ K
+        K --> SS
+        K --> SB
+        RV --> SRV
+        HV --> SRV
+    end
+    
+    style LAMBDA fill:#f3e5f5,stroke:#ab47bc
 ```
 
 ### 3. ML Feature Engineering at Scale

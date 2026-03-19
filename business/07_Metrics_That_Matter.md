@@ -263,39 +263,31 @@ For each data product (table, dashboard, model):
 
 ## Metrics Dashboard Template
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATA PLATFORM HEALTH                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  BUSINESS IMPACT (This Month)                                   │
-│  ┌──────────────┬──────────────┬──────────────┐                 │
-│  │ Cost Saved   │ Hours Saved  │ Decisions    │                 │
-│  │ $4,300       │ 120 hrs      │ 45           │                 │
-│  │ ↓28% MoM     │ ↑20% MoM     │ ↑15% MoM     │                 │
-│  └──────────────┴──────────────┴──────────────┘                 │
-│                                                                  │
-│  DATA QUALITY                                                    │
-│  ┌──────────────┬──────────────┬──────────────┐                 │
-│  │ Accuracy     │ Freshness    │ Completeness │                 │
-│  │ 99.8% ✅     │ 98% SLA ✅   │ 99.5% ✅     │                 │
-│  └──────────────┴──────────────┴──────────────┘                 │
-│                                                                  │
-│  OPERATIONS                                                      │
-│  ┌──────────────┬──────────────┬──────────────┐                 │
-│  │ Pipeline Up  │ MTTR         │ Changes OK   │                 │
-│  │ 99.5% ✅     │ 45 min ✅    │ 92% ✅       │                 │
-│  └──────────────┴──────────────┴──────────────┘                 │
-│                                                                  │
-│  ADOPTION                                                        │
-│  ┌──────────────┬──────────────┬──────────────┐                 │
-│  │ Daily Users  │ Queries/Day  │ Self-Service │                 │
-│  │ 45           │ 1,200        │ 85%          │                 │
-│  │ ↑5% MoM      │ ↑12% MoM     │ ↑3% MoM      │                 │
-│  └──────────────┴──────────────┴──────────────┘                 │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **📊 DATA PLATFORM HEALTH DASHBOARD**
+> 
+> **BUSINESS IMPACT (This Month)**
+> 
+> | Cost Saved | Hours Saved | Decisions |
+> |---|---|---|
+> | $4,300<br>↓28% MoM | 120 hrs<br>↑20% MoM | 45<br>↑15% MoM |
+> 
+> **DATA QUALITY**
+> 
+> | Accuracy | Freshness | Completeness |
+> |---|---|---|
+> | 99.8% ✅ | 98% SLA ✅ | 99.5% ✅ |
+> 
+> **OPERATIONS**
+> 
+> | Pipeline Up | MTTR | Changes OK |
+> |---|---|---|
+> | 99.5% ✅ | 45 min ✅ | 92% ✅ |
+> 
+> **ADOPTION**
+> 
+> | Daily Users | Queries/Day | Self-Service |
+> |---|---|---|
+> | 45<br>↑5% MoM | 1,200<br>↑12% MoM | 85%<br>↑3% MoM |
 
 ---
 

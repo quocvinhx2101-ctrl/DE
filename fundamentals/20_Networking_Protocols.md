@@ -327,17 +327,19 @@ ip = socket.gethostbyname("api.example.com")
 
 ### Load Balancing
 
+```mermaid
+flowchart LR
+    Client --> LB["LB"]
+    LB --> W1["Worker 1<br>(Spark executor)"]
+    LB --> W2["Worker 2<br>(Spark executor)"]
+    LB --> W3["Worker 3<br>(Spark executor)"]
 ```
-                ┌── Worker 1 (Spark executor)
-Client ──→ LB ─┼── Worker 2 (Spark executor)
-                └── Worker 3 (Spark executor)
 
 DE encounters load balancers:
 1. API endpoints (round-robin across servers)
 2. Database read replicas 
 3. Kafka brokers
 4. Spark executors
-```
 
 ```python
 # When DE needs to handle load balancing
@@ -370,27 +372,40 @@ router = ReplicaRouter([
 ## Network trong Cloud & Distributed Systems
 
 ### VPC (Virtual Private Cloud)
+ VPC = Your private network in cloud
 
-```
-VPC = Your private network in cloud
+```mermaid
+flowchart TD
+    subgraph VPC [" "]
+        direction TB
+        VPC_TITLE["VPC (10.0.0.0/16)"]
+        style VPC_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph PUB [" "]
+            direction TB
+            P_TITLE["Public Subnet (10.0.1.0/24)"]
+            style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            P_NODE["Airflow Webserver (public access)<br>API Gateway"]
+            P_TITLE ~~~ P_NODE
+        end
+        
+        subgraph PRIV [" "]
+            direction TB
+            PR_TITLE["Private Subnet (10.0.2.0/24)"]
+            style PR_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            PR_NODE["Spark Cluster (internal only)<br>PostgreSQL (internal only)<br>Kafka (internal only)"]
+            PR_TITLE ~~~ PR_NODE
+        end
+        
+        VPC_TITLE ~~~ PUB
+        PUB ~~~ PRIV
+    end
+    
+    style PUB fill:#e3f2fd,stroke:#90caf9
+    style PRIV fill:#e8f5e9,stroke:#a5d6a7
 
-┌───────────────────── VPC (10.0.0.0/16) ─────────────────────┐
-│                                                               │
-│  ┌─── Public Subnet (10.0.1.0/24) ───┐                      │
-│  │  Airflow Webserver (public access)  │                      │
-│  │  API Gateway                        │                      │
-│  └────────────────────────────────────┘                      │
-│                                                               │
-│  ┌─── Private Subnet (10.0.2.0/24) ──┐                      │
-│  │  Spark Cluster (internal only)      │                      │
-│  │  PostgreSQL (internal only)         │                      │
-│  │  Kafka (internal only)              │                      │
-│  └────────────────────────────────────┘                      │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-
-Rule: Databases và data processing → Private subnet
-      Only entry points → Public subnet
+    RULE_NODE["Rule: Databases và data processing → Private subnet<br>Only entry points → Public subnet"]
+    style RULE_NODE fill:#fff3e0,stroke:#ffb74d,stroke-dasharray: 5 5
 ```
 
 ### Security Groups (Firewall Rules)
@@ -416,30 +431,49 @@ Common mistakes:
 
 ### Network trong Spark
 
-```
 Data Locality:
 - Spark tries to process data where it resides
 - Network transfer (shuffle) is EXPENSIVE
 
-┌──────────────────────────┐
-│  Shuffle = Network I/O   │
-│                          │
-│  Stage 1        Stage 2  │
-│  ┌─────┐       ┌─────┐  │
-│  │Map 1│──┐ ┌──│Red 1│  │
-│  └─────┘  │ │  └─────┘  │
-│  ┌─────┐  ├─┤  ┌─────┐  │
-│  │Map 2│──┤ ├──│Red 2│  │
-│  └─────┘  │ │  └─────┘  │
-│  ┌─────┐  │ │  ┌─────┐  │
-│  │Map 3│──┘ └──│Red 3│  │
-│  └─────┘       └─────┘  │
-│                          │
-│  All-to-all = O(N × M)  │
-│  This is why JOINs are   │
-│  expensive!              │
-└──────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SHUFFLE [" "]
+        direction TB
+        S_TITLE["Shuffle = Network I/O"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph STAGES [" "]
+            direction LR
+            subgraph S1 ["Stage 1"]
+                direction TB
+                M1["Map 1"]
+                M2["Map 2"]
+                M3["Map 3"]
+            end
+            
+            subgraph S2 ["Stage 2"]
+                direction TB
+                R1["Red 1"]
+                R2["Red 2"]
+                R3["Red 3"]
+            end
+        end
+        
+        S_TITLE ~~~ STAGES
+        
+        S_DESC["All-to-all = O(N × M)<br>This is why JOINs are expensive!"]
+        style S_DESC fill:none,stroke:none,font-weight:bold,color:#d32f2f
+        STAGES ~~~ S_DESC
+    end
+    
+    M1 --> R1 & R2 & R3
+    M2 --> R1 & R2 & R3
+    M3 --> R1 & R2 & R3
+    
+    style STAGES fill:none,stroke:none
+    style SHUFFLE fill:#fff3e0,stroke:#ffcc80
 ```
+
 
 ```python
 # Spark network optimization
@@ -458,7 +492,6 @@ spark.conf.set("spark.locality.wait", "3s")
 
 ### Network trong Kafka
 
-```
 Producer ──→ Broker 1 ──→ Consumer Group
              Broker 2 ──→ Consumer Group  
              Broker 3 ──→ Consumer Group
@@ -467,9 +500,6 @@ Key network concepts:
 1. Replication: Data copied across brokers (network I/O)
 2. Consumer lag: Network/processing bottleneck
 3. Partition assignment: Balance network load
-```
-
----
 
 ## Debugging Network Issues
 
@@ -503,7 +533,7 @@ ss -tuln | grep 5432
 
 # 8. Check bandwidth
 iperf3 -c target-host  # Between 2 servers
-```
+
 
 ### Common DE Network Errors
 

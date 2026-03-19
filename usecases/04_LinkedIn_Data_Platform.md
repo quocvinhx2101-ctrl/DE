@@ -78,261 +78,177 @@ graph TB
 **Origin:** Created by LinkedIn in 2010, open-sourced 2011, Apache 2012
 
 ```
-KAFKA AT LINKEDIN:
+```mermaid
+flowchart TD
+    subgraph KAFKA [" "]
+        direction TB
+        K_TITLE["KAFKA ECOSYSTEM"]
+        style K_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CLUSTERS ["Clusters"]
+            direction LR
+            TC["Tracking<br>Cluster"]
+            MC["Metrics<br>Cluster"]
+            QC["Queuing<br>Cluster"]
+            CC["Change<br>Capture"]
+        end
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    KAFKA ECOSYSTEM                               │
-│                                                                  │
-│  Scale (2024):                                                   │
-│  - 7+ trillion messages/day                                     │
-│  - 7+ PB of data/day                                            │
-│  - 100K+ topics                                                 │
-│  - 1000s of producers/consumers                                 │
-│                                                                  │
-│  Clusters:                                                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │ Tracking │ │ Metrics  │ │ Queuing  │ │ Change   │           │
-│  │ Cluster  │ │ Cluster  │ │ Cluster  │ │ Capture  │           │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
-│                                                                  │
-│  Key Innovations:                                                │
-│  - Log compaction (for derived data)                            │
-│  - Exactly-once semantics                                       │
-│  - Kafka Streams                                                │
-│  - Kafka Connect                                                │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-
-
-KAFKA USE CASES:
-
-1. Activity Tracking:
-   - Page views, clicks, searches
-   - Used for analytics and ML
-
-2. Metrics Pipeline:
-   - Operational metrics
-   - Business metrics
-
-3. Data Integration:
-   - Change data capture
-   - Database replication
-
-4. Commit Log:
-   - Event sourcing
-   - Derived data
-
-
-WHY LINKEDIN CREATED KAFKA:
-
-Problem (2009):
-- Many data pipelines
-- Point-to-point connections
-- Inconsistent data
-- Scaling issues
-
-Solution (Kafka):
-- Central commit log
-- Publish-subscribe
-- Horizontal scaling
-- Durability + replay
+> **KAFKA AT LINKEDIN:**
+> 
+> * **Scale (2024):** 7+ trillion messages/day, 7+ PB/day, 100K+ topics. 1000s of producers/consumers.
+> * **Key Innovations:**
+>   * Log compaction (for derived data)
+>   * Exactly-once semantics
+>   * Kafka Streams
+>   * Kafka Connect
+> 
+> * **KAFKA USE CASES:**
+>   1. **Activity Tracking:** Page views, clicks, searches (Analytics, ML)
+>   2. **Metrics Pipeline:** Operational metrics, Business metrics
+>   3. **Data Integration:** Change data capture, Database replication
+>   4. **Commit Log:** Event sourcing, Derived data
+> 
+> * **WHY LINKEDIN CREATED KAFKA:**
+>   * **Problem (2009):** Many data pipelines, Point-to-point connections, Inconsistent data, Scaling issues
+>   * **Solution (Kafka):** Central commit log, Publish-subscribe, Horizontal scaling, Durability + replay
 ```
 
 ### 2. Apache Samza (LinkedIn Created)
 
 ```
-SAMZA ARCHITECTURE:
+```mermaid
+flowchart TD
+    subgraph SAMZA [" "]
+        direction TB
+        S_TITLE["SAMZA<br>(Stateful Stream Processing)"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        IN["Input<br>(Kafka)"]
+        TASK["Task<br>Process + State (RocksDB)"]
+        OUT["Output<br>(Kafka)"]
+        
+        IN --> TASK
+        TASK --> OUT
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        SAMZA                                     │
-│              (Stateful Stream Processing)                       │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Samza Job                               │   │
-│  │                                                           │   │
-│  │   Input                Task                  Output        │   │
-│  │  (Kafka) ─────> ┌─────────────┐ ─────────> (Kafka)        │   │
-│  │                 │ Process     │                           │   │
-│  │                 │ + State     │                           │   │
-│  │                 │ (RocksDB)   │                           │   │
-│  │                 └─────────────┘                           │   │
-│  │                                                           │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Key Features:                                                   │
-│  - Local state (RocksDB)                                        │
-│  - State replication via Kafka                                  │
-│  - Exactly-once processing                                      │
-│  - Easy recovery                                                │
-└─────────────────────────────────────────────────────────────────┘
-
-
-SAMZA USE CASES:
-
-1. Standardization:
-   - Raw events -> standardized events
-   - Schema validation
-
-2. Aggregation:
-   - Near-real-time metrics
-   - Session aggregation
-
-3. Derived Data:
-   - Compute features
-   - Update Venice
+> **Key Features:**
+> - Local state (RocksDB)
+> - State replication via Kafka
+> - Exactly-once processing
+> - Easy recovery
+> 
+> **SAMZA USE CASES:**
+> 1. Standardization: Raw events -> standardized events, Schema validation
+> 2. Aggregation: Near-real-time metrics, Session aggregation
+> 3. Derived Data: Compute features, Update Venice
 ```
 
 ### 3. Apache Pinot (LinkedIn Created)
 
 ```
-PINOT AT LINKEDIN:
+```mermaid
+flowchart TD
+    subgraph PINOT [" "]
+        direction TB
+        P_TITLE["PINOT<br>(Real-time OLAP)"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        QB["Query Broker<br>- Query routing<br>- Result merging"]
+        RS["Real-time Server<br>(Kafka ingestion)"]
+        OS["Offline Server<br>(HDFS segments)"]
+        
+        QB --> RS
+        QB --> OS
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        PINOT                                     │
-│              (Real-time OLAP)                                   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Query Broker                                 │   │
-│  │  - Query routing                                         │   │
-│  │  - Result merging                                        │   │
-│  └──────────────────────────┬───────────────────────────────┘   │
-│                             │                                    │
-│           ┌─────────────────┴─────────────────┐                 │
-│           v                                   v                 │
-│  ┌─────────────────┐               ┌─────────────────┐         │
-│  │ Real-time Server│               │ Offline Server  │         │
-│  │ (Kafka ingestion)               │ (HDFS segments) │         │
-│  └─────────────────┘               └─────────────────┘         │
-│                                                                  │
-│  Use Cases at LinkedIn:                                          │
-│  - Who Viewed My Profile (real-time)                            │
-│  - Campaign analytics                                           │
-│  - A/B test results                                             │
-│  - Ads performance                                              │
-│                                                                  │
-│  Scale:                                                          │
-│  - 100K+ queries/second                                         │
-│  - Sub-second latency (p99 < 100ms)                             │
-│  - 100s of tables                                               │
-└─────────────────────────────────────────────────────────────────┘
+> **PINOT AT LINKEDIN:**
+> 
+> * **Use Cases:** Who Viewed My Profile (real-time), Campaign analytics, A/B test results, Ads performance
+> * **Scale:** 100K+ queries/second, Sub-second latency (p99 < 100ms), 100s of tables
 ```
 
 ### 4. Venice (Derived Data Store)
 
 ```
-VENICE ARCHITECTURE:
+```mermaid
+flowchart TD
+    subgraph VENICE [" "]
+        direction TB
+        V_TITLE["VENICE<br>(Read-after-write derived data)"]
+        style V_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        BATCH["Batch (Spark)"]
+        STREAM["Stream (Samza)"]
+        FP["Full push"]
+        RT["RT update"]
+        VS["Venice Server (RocksDB-based)<br>- Key-value<br>- Versioned"]
+        
+        BATCH --> FP
+        STREAM --> RT
+        FP --> VS
+        RT --> VS
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        VENICE                                    │
-│              (Read-after-write derived data)                    │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Data Flow                                    │   │
-│  │                                                           │   │
-│  │   Batch (Spark)                    Stream (Samza)         │   │
-│  │        │                                │                 │   │
-│  │        v                                v                 │   │
-│  │  ┌──────────┐                    ┌──────────┐            │   │
-│  │  │ Full push│                    │ RT update│            │   │
-│  │  └────┬─────┘                    └────┬─────┘            │   │
-│  │       │                               │                   │   │
-│  │       └───────────┬───────────────────┘                   │   │
-│  │                   v                                       │   │
-│  │          ┌───────────────┐                               │   │
-│  │          │ Venice Server │  (RocksDB-based)              │   │
-│  │          │ - Key-value   │                               │   │
-│  │          │ - Versioned   │                               │   │
-│  │          └───────────────┘                               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Use Cases:                                                      │
-│  - Feature serving (ML)                                         │
-│  - Derived data for applications                                │
-│  - Cache bypass                                                 │
-│                                                                  │
-│  Properties:                                                     │
-│  - Eventually consistent                                        │
-│  - High read throughput                                         │
-│  - Batch + streaming writes                                     │
-└─────────────────────────────────────────────────────────────────┘
+> **VENICE CHARACTERISTICS:**
+> 
+> * **Use Cases:** Feature serving (ML), Derived data for applications, Cache bypass
+> * **Properties:** Eventually consistent, High read throughput, Batch + streaming writes
 ```
 
 ### 5. Datahub (Metadata Platform)
 
 ```
-DATAHUB ARCHITECTURE:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        DATAHUB                                   │
-│              (Unified Metadata Platform)                        │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Metadata Sources                             │   │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐            │   │
-│  │  │ Hive   │ │ Kafka  │ │ Spark  │ │ Airflow│            │   │
-│  │  │ Tables │ │ Topics │ │ Jobs   │ │ DAGs   │            │   │
-│  │  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘            │   │
-│  └──────┼──────────┼──────────┼──────────┼──────────────────┘   │
-│         │          │          │          │                       │
-│         v          v          v          v                       │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Metadata Ingestion                           │   │
-│  │  - Crawlers                                              │   │
-│  │  - Push APIs                                             │   │
-│  │  - Kafka events                                          │   │
-│  └──────────────────────────┬───────────────────────────────┘   │
-│                             v                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Metadata Store                               │   │
-│  │  - Graph DB (relationships)                              │   │
-│  │  - Search index (Elasticsearch)                          │   │
-│  │  - Kafka (change log)                                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                             │                                    │
-│                             v                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              UI & APIs                                    │   │
-│  │  - Search & discovery                                    │   │
-│  │  - Lineage visualization                                 │   │
-│  │  - Data quality scores                                   │   │
-│  │  - Ownership management                                  │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph DATAHUB [" "]
+        direction TB
+        D_TITLE["DATAHUB<br>(Unified Metadata Platform)"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph SOURCES ["Metadata Sources"]
+            direction LR
+            HT["Hive Tables"]
+            KT["Kafka Topics"]
+            SJ["Spark Jobs"]
+            AD["Airflow DAGs"]
+        end
+        style SOURCES fill:none,stroke:none
+        
+        INGEST["Metadata Ingestion<br>- Crawlers<br>- Push APIs<br>- Kafka events"]
+        STORE["Metadata Store<br>- Graph DB (relationships)<br>- Search index (Elasticsearch)<br>- Kafka (change log)"]
+        UI["UI & APIs<br>- Search & discovery<br>- Lineage visualization<br>- Data quality scores<br>- Ownership management"]
+        
+        SOURCES --> INGEST
+        INGEST --> STORE
+        STORE --> UI
+    end
+```
 ```
 
 ### 6. Feathr (Feature Store)
 
 ```
-FEATHR ARCHITECTURE:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        FEATHR                                    │
-│              (Enterprise Feature Store)                         │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Feature Definition (Python)                  │   │
-│  │                                                           │   │
-│  │  anchor = FeatureAnchor(                                  │   │
-│  │      name="member_features",                              │   │
-│  │      source=HdfsSource("/data/members"),                  │   │
-│  │      features=[                                           │   │
-│  │          Feature(name="connections_count",                │   │
-│  │                  transform="connections",                 │   │
-│  │                  type=INT32),                             │   │
-│  │          Feature(name="profile_views_7d",                 │   │
-│  │                  transform=WindowAgg("views", 7, "count"))│   │
-│  │      ]                                                    │   │
-│  │  )                                                        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                             │                                    │
-│              ┌──────────────┴──────────────┐                    │
-│              v                             v                    │
-│  ┌──────────────────┐          ┌──────────────────┐            │
-│  │ Offline (Spark)  │          │ Online (Redis)   │            │
-│  │ - Training data  │          │ - Serving        │            │
-│  │ - Backfill       │          │ - Low latency    │            │
-│  └──────────────────┘          └──────────────────┘            │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph FEATHR [" "]
+        direction TB
+        F_TITLE["FEATHR<br>(Enterprise Feature Store)"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        FD["Feature Definition (Python)<br>anchor = FeatureAnchor(<br>  name='member_features',<br>  source=HdfsSource('/data/members'),<br>  features=[<br>    Feature(name='connections_count', transform='connections', type=INT32),<br>    Feature(name='profile_views_7d', transform=WindowAgg('views', 7, 'count'))<br>  ]<br>)"]
+        
+        OS1["Offline (Spark)<br>- Training data<br>- Backfill"]
+        OS2["Online (Redis)<br>- Serving<br>- Low latency"]
+        
+        FD --> OS1
+        FD --> OS2
+    end
+```
 ```
 
 ---
@@ -350,46 +266,27 @@ FEATHR ARCHITECTURE:
 **HOW - Implementation:**
 
 ```
-FEED RANKING SYSTEM:
-
-Member opens LinkedIn
-         │
-         v
-┌──────────────────────────────────────────┐
-│ Candidate Generation                      │
-│ - Posts from connections                  │
-│ - Posts from followed companies           │
-│ - Recommended content                     │
-│ - Ads candidates                          │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Feature Fetch (Venice + Pinot)           │
-│ - Member features                         │
-│ - Author features                         │
-│ - Content features                        │
-│ - Context features                        │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Ranking Models                            │
-│ - First pass: lightweight model           │
-│ - Second pass: deep neural network        │
-│ - Objectives: engagement + relevance      │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Blending & Diversity                      │
-│ - Mix organic + sponsored                 │
-│ - Ensure diversity                        │
-│ - Apply business rules                    │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-           Personalized Feed
+```mermaid
+flowchart TD
+    subgraph FEED [" "]
+        direction TB
+        F_TITLE["FEED RANKING SYSTEM"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        USER["Member opens LinkedIn"]
+        CG["Candidate Generation<br>- Posts from connections<br>- Posts from followed companies<br>- Recommended content<br>- Ads candidates"]
+        FF["Feature Fetch (Venice + Pinot)<br>- Member features<br>- Author features<br>- Content features<br>- Context features"]
+        RM["Ranking Models<br>- First pass: lightweight model<br>- Second pass: deep neural network<br>- Objectives: engagement + relevance"]
+        BD["Blending & Diversity<br>- Mix organic + sponsored<br>- Ensure diversity<br>- Apply business rules"]
+        RES["Personalized Feed"]
+        
+        USER --> CG
+        CG --> FF
+        FF --> RM
+        RM --> BD
+        BD --> RES
+    end
+```
 ```
 
 **WHY - Lý do & Impact:**
@@ -411,39 +308,26 @@ Member opens LinkedIn
 **HOW - Implementation:**
 
 ```
-PYMK SYSTEM:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    PEOPLE YOU MAY KNOW                           │
-│                                                                  │
-│  Graph Analysis:                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │           LinkedIn Social Graph                           │   │
-│  │           (900M+ nodes, billions of edges)               │   │
-│  │                                                           │   │
-│  │     You ──────┬────────────────┐                         │   │
-│  │               │                │                         │   │
-│  │              ┌┴┐              ┌┴┐                        │   │
-│  │              │A│──────────────│B│ (2nd degree)           │   │
-│  │              └─┘              └┬┘                        │   │
-│  │                               │                          │   │
-│  │                              ┌┴┐                         │   │
-│  │                              │C│ (3rd degree)            │   │
-│  │                              └─┘                         │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Candidate Sources:                                              │
-│  - 2nd degree connections                                       │
-│  - Same company/school alumni                                   │
-│  - Profile viewers                                              │
-│  - Imported contacts                                            │
-│                                                                  │
-│  Ranking Signals:                                                │
-│  - Connection strength (mutual connections)                     │
-│  - Profile similarity (industry, skills)                        │
-│  - Interaction history (profile views, searches)                │
-│  - Recency                                                      │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PYMK [" "]
+        direction TB
+        P_TITLE["PEOPLE YOU MAY KNOW"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        GA["Graph Analysis:<br>LinkedIn Social Graph (900M+ nodes, billions of edges)<br>You -> A -> B (2nd degree)<br>         -> C (3rd degree)"]
+        style GA fill:none,stroke:none,text-align:left
+        
+        CS["Candidate Sources:<br>- 2nd degree connections<br>- Same company/school alumni<br>- Profile viewers<br>- Imported contacts"]
+        style CS fill:none,stroke:none,text-align:left
+        
+        RS["Ranking Signals:<br>- Connection strength (mutual connections)<br>- Profile similarity (industry, skills)<br>- Interaction history (profile views, searches)<br>- Recency"]
+        style RS fill:none,stroke:none,text-align:left
+        
+        GA --> CS
+        CS --> RS
+    end
+```
 ```
 
 **WHY - Lý do & Impact:**
@@ -465,39 +349,24 @@ PYMK SYSTEM:
 **HOW - Implementation:**
 
 ```
-JOB MATCHING SYSTEM:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    JOB RECOMMENDATIONS                           │
-│                                                                  │
-│  Member Profile                        Job Posting               │
-│  ┌────────────────┐                   ┌────────────────┐        │
-│  │ - Title        │                   │ - Title        │        │
-│  │ - Skills       │                   │ - Required     │        │
-│  │ - Experience   │                   │ - Preferred    │        │
-│  │ - Location     │                   │ - Location     │        │
-│  │ - Preferences  │                   │ - Company      │        │
-│  └───────┬────────┘                   └───────┬────────┘        │
-│          │                                    │                  │
-│          └─────────────┬──────────────────────┘                  │
-│                        │                                         │
-│                        v                                         │
-│          ┌──────────────────────────┐                           │
-│          │ Matching Model           │                           │
-│          │ - Semantic matching      │                           │
-│          │ - Skill graph embedding  │                           │
-│          │ - Location preference    │                           │
-│          │ - Career trajectory      │                           │
-│          └─────────────┬────────────┘                           │
-│                        │                                         │
-│                        v                                         │
-│          ┌──────────────────────────┐                           │
-│          │ Ranking                  │                           │
-│          │ - Relevance score        │                           │
-│          │ - Apply likelihood       │                           │
-│          │ - Quality indicators     │                           │
-│          └──────────────────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph JOB [" "]
+        direction TB
+        J_TITLE["JOB RECOMMENDATIONS"]
+        style J_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        MP["Member Profile<br>- Title<br>- Skills<br>- Experience<br>- Location<br>- Preferences"]
+        JP["Job Posting<br>- Title<br>- Required<br>- Preferred<br>- Location<br>- Company"]
+        
+        MM["Matching Model<br>- Semantic matching<br>- Skill graph embedding<br>- Location preference<br>- Career trajectory"]
+        RANK["Ranking<br>- Relevance score<br>- Apply likelihood<br>- Quality indicators"]
+        
+        MP --> MM
+        JP --> MM
+        MM --> RANK
+    end
+```
 ```
 
 **WHY - Lý do & Impact:**
@@ -511,26 +380,26 @@ JOB MATCHING SYSTEM:
 ## 🛠️ LINKEDIN OPEN SOURCE CONTRIBUTIONS
 
 ```
-LINKEDIN OSS ECOSYSTEM:
-
-Data Infrastructure:
-├── Apache Kafka         - Distributed streaming
-├── Apache Samza         - Stream processing  
-├── Apache Pinot         - Real-time OLAP
-├── Apache Gobblin       - Data ingestion
-├── Venice              - Derived data store
-├── Datahub             - Metadata platform (now Acryl)
-├── Feathr              - Feature store
-└── Brooklin            - Kafka mirroring
-
-ML/AI:
-├── Photon-ML           - ML library
-└── li-apache-kafka-clients - Enhanced Kafka client
-
-Infrastructure:
-├── Ambry               - Blob store
-├── Rest.li             - REST framework
-└── Helix               - Cluster management
+> **LINKEDIN OSS ECOSYSTEM:**
+> 
+> * **Data Infrastructure:**
+>   * Apache Kafka (Distributed streaming)
+>   * Apache Samza (Stream processing)
+>   * Apache Pinot (Real-time OLAP)
+>   * Apache Gobblin (Data ingestion)
+>   * Venice (Derived data store)
+>   * Datahub (Metadata platform - now Acryl)
+>   * Feathr (Feature store)
+>   * Brooklin (Kafka mirroring)
+> 
+> * **ML/AI:**
+>   * Photon-ML (ML library)
+>   * li-apache-kafka-clients (Enhanced Kafka client)
+> 
+> * **Infrastructure:**
+>   * Ambry (Blob store)
+>   * Rest.li (REST framework)
+>   * Helix (Cluster management)
 ```
 
 ---
@@ -538,25 +407,25 @@ Infrastructure:
 ## 📊 SCALE & NUMBERS
 
 ```
-LINKEDIN BY THE NUMBERS:
-
-Kafka:
-- 7+ trillion messages/day
-- 7+ PB throughput/day
-- 100K+ topics
-- 4000+ Kafka brokers
-
-Data Infrastructure:
-- Exabytes in HDFS
-- 100+ Pinot clusters
-- 1000s of Spark jobs/day
-- 10,000s of streaming jobs
-
-Platform:
-- 900M+ members
-- 60M+ companies
-- 40M+ job postings
-- Billions of API calls/day
+> **LINKEDIN BY THE NUMBERS:**
+> 
+> * **Kafka:**
+>   * 7+ trillion messages/day
+>   * 7+ PB throughput/day
+>   * 100K+ topics
+>   * 4000+ Kafka brokers
+> 
+> * **Data Infrastructure:**
+>   * Exabytes in HDFS
+>   * 100+ Pinot clusters
+>   * 1000s of Spark jobs/day
+>   * 10,000s of streaming jobs
+> 
+> * **Platform:**
+>   * 900M+ members
+>   * 60M+ companies
+>   * 40M+ job postings
+>   * Billions of API calls/day
 ```
 
 ---

@@ -62,32 +62,31 @@
 
 **Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Manufacturing Sources                     │
-├──────────────┬──────────────┬──────────────┬────────────────┤
-│    PLC/      │     MES      │     ERP      │    Quality     │
-│   SCADA      │  (Ignition)  │  (SAP/Oracle)│     System     │
-└──────┬───────┴──────┬───────┴──────┬───────┴───────┬────────┘
-       │              │              │               │
-       ▼              ▼              ▼               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Data Ingestion                          │
-│   IoT Hub / Kafka → TimescaleDB (hot) → Snowflake (cold)    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Snowflake + dbt                           │
-│        Time-series aggregation → Production metrics          │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-┌───────────────────────┐    ┌───────────────────────┐
-│      Grafana          │    │    Sigma / Looker     │
-│   (Real-time ops)     │    │  (Business analytics) │
-└───────────────────────┘    └───────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MFG [" "]
+        direction TB
+        
+        subgraph SRC ["Manufacturing Sources"]
+            direction LR
+            PLC["PLC/<br>SCADA"]
+            MES["MES<br>(Ignition)"]
+            ERP["ERP<br>(SAP/Oracle)"]
+            QS["Quality<br>System"]
+        end
+        
+        DI["Data Ingestion<br>IoT Hub / Kafka → TimescaleDB (hot) → Snowflake (cold)"]
+        
+        WH["Snowflake + dbt<br>Time-series aggregation → Production metrics"]
+        
+        BI1["Grafana<br>(Real-time ops)"]
+        BI2["Sigma / Looker<br>(Business analytics)"]
+        
+        SRC --> DI
+        DI --> WH
+        WH --> BI1
+        WH --> BI2
+    end
 ```
 
 **Key dbt Models:**

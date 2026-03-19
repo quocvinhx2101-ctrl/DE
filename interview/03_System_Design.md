@@ -424,59 +424,50 @@ GROUP BY 1, 2;
 
 ### Architecture
 
+```mermaid
+flowchart TD
+    subgraph INGEST ["Ingestion"]
+        UE["User Events<br>(Real-time)"]
+        PD["Product Data<br>(Batch)"]
+    end
+    
+    KF["Kafka<br>(Event Stream)"]
+    SP["Spark<br>(Batch Ingest)"]
+    
+    UE --> KF
+    PD --> SP
+    
+    subgraph FS ["Feature Store"]
+        direction TB
+        OFF["Offline<br>Hudi"]
+        ON["Online<br>Redis"]
+    end
+    
+    KF --> FS
+    SP --> FS
+    
+    MT["Model Training<br>(Spark + MLlib)"]
+    MS["Model Serving<br>(Feature lookup)"]
+    
+    FS --> MT
+    FS --> MS
+    
+    API["Recommendation<br>API"]
+    MS --> API
 ```
-                    RECOMMENDATION DATA PLATFORM
 
-+----------------+                     +----------------+
-|  User Events   |                     |  Product Data  |
-|  (Real-time)   |                     |   (Batch)      |
-+-------+--------+                     +-------+--------+
-        |                                      |
-        v                                      v
-+-------+--------+                     +-------+--------+
-|     Kafka      |                     |    Spark       |
-| (Event Stream) |                     | (Batch Ingest) |
-+-------+--------+                     +-------+--------+
-        |                                      |
-        +----------------+---------------------+
-                         |
-                         v
-              +----------+----------+
-              |    Feature Store    |
-              |                     |
-              | +-------+ +-------+ |
-              | |Offline| |Online | |
-              | | Hudi  | | Redis | |
-              | +-------+ +-------+ |
-              +----------+----------+
-                    |         |
-         +----------+         +----------+
-         |                               |
-         v                               v
-+--------+--------+            +--------+--------+
-|  Model Training |            | Model Serving   |
-|  (Spark + MLlib)|            | (Feature lookup)|
-+-----------------+            +--------+--------+
-                                        |
-                                        v
-                               +-----------------+
-                               | Recommendation  |
-                               |      API        |
-                               +-----------------+
-
-Real-time Flow:
+**Real-time Flow:**
 1. User action → Kafka
 2. Flink updates online features → Redis
 3. Recommendation API queries Redis
 4. Model inference → personalized results
 
-Batch Flow:
+**Batch Flow:**
 1. Daily Spark job reads Kafka/S3
 2. Compute aggregated features
 3. Store in Hudi (offline store)
 4. Train ML model
 5. Deploy model
-```
 
 ### Feature Store Design
 
@@ -546,48 +537,46 @@ Point-in-time Correct:
 
 ### Architecture
 
-```
-                    LOG AGGREGATION SYSTEM
-
-+------------------+    +------------------+    +------------------+
-|   Microservices  |    |   Microservices  |    |   Microservices  |
-|   (Pod 1...N)    |    |   (Pod 1...N)    |    |   (Pod 1...N)    |
-+--------+---------+    +--------+---------+    +--------+---------+
-         |                       |                       |
-         |  stdout/stderr        |                       |
-         v                       v                       v
-+--------+---------+    +--------+---------+    +--------+---------+
-|   Fluent Bit     |    |   Fluent Bit     |    |   Fluent Bit     |
-|   (DaemonSet)    |    |   (DaemonSet)    |    |   (DaemonSet)    |
-+--------+---------+    +--------+---------+    +--------+---------+
-         |                       |                       |
-         +--------->+<-----------+<-----------+----------+
-                    |
-                    v
-          +--------+--------+
-          |      Kafka      |
-          |  (Buffer/Decouple)|
-          +--------+--------+
-                   |
-        +----------+----------+
-        |                     |
-        v                     v
-+-------+-------+     +-------+-------+
-| Flink         |     | Kafka Connect |
-| (Aggregation) |     | (S3 Sink)     |
-+-------+-------+     +-------+-------+
-        |                     |
-        v                     v
-+-------+-------+     +-------+-------+
-| OpenSearch    |     |     S3        |
-| (Hot: 7 days) |     | (Cold: 30 days)|
-+---------------+     +---------------+
-        |
-        v
-+---------------+
-| Grafana       |
-| (Dashboards)  |
-+---------------+
+```mermaid
+flowchart TD
+    subgraph MS ["Microservices (Pod 1...N)"]
+        direction LR
+        M1["Pod"]
+        M2["Pod"]
+        M3["Pod"]
+    end
+    
+    subgraph FB ["Fluent Bit (DaemonSet)"]
+        direction LR
+        FB1["Agent"]
+        FB2["Agent"]
+        FB3["Agent"]
+    end
+    
+    M1 -->|stdout/stderr| FB1
+    M2 -->|stdout/stderr| FB2
+    M3 -->|stdout/stderr| FB3
+    
+    KF["Kafka<br>(Buffer/Decouple)"]
+    
+    FB1 --> KF
+    FB2 --> KF
+    FB3 --> KF
+    
+    FL["Flink<br>(Aggregation)"]
+    KC["Kafka Connect<br>(S3 Sink)"]
+    
+    KF --> FL
+    KF --> KC
+    
+    OS["OpenSearch<br>(Hot: 7 days)"]
+    S3["S3<br>(Cold: 30 days)"]
+    
+    FL --> OS
+    KC --> S3
+    
+    GF["Grafana<br>(Dashboards)"]
+    OS --> GF
 ```
 
 ### Key Design Decisions
@@ -642,50 +631,47 @@ Cold (S3 + Parquet): 30 days
 
 ### Architecture
 
+```mermaid
+flowchart TD
+    subgraph APPS ["Applications"]
+        direction LR
+        A1["App 1"]
+        A2["App 2"]
+        A3["App 3"]
+    end
+    
+    subgraph AGENTS ["Prometheus Agents"]
+        direction LR
+        PA1["Prom Agent"]
+        PA2["Prom Agent"]
+        PA3["Prom Agent"]
+    end
+    
+    A1 -->|Expose /metrics| PA1
+    A2 -->|Expose /metrics| PA2
+    A3 -->|Expose /metrics| PA3
+    
+    PROM["Prometheus<br>(Short-term: 2 weeks)"]
+    
+    PA1 --> PROM
+    PA2 --> PROM
+    PA3 --> PROM
+    
+    THANOS["Thanos<br>(Long-term: S3 storage)"]
+    
+    PROM --> THANOS
+    
+    GF["Grafana<br>(Dashboard)"]
+    
+    THANOS --> GF
 ```
-                    METRICS COLLECTION SYSTEM
 
-Applications
-+--------+  +--------+  +--------+
-| App 1  |  | App 2  |  | App 3  |
-+---+----+  +---+----+  +---+----+
-    |           |           |
-    | Expose /metrics (Prometheus format)
-    v           v           v
-+---+---+   +---+---+   +---+---+
-| Prom  |   | Prom  |   | Prom  |
-| Agent |   | Agent |   | Agent |
-+---+---+   +---+---+   +---+---+
-    |           |           |
-    +------->+<-+---------->+
-             |
-             v
-    +--------+--------+
-    |   Prometheus    |
-    |   (Short-term)  |
-    |   2 weeks       |
-    +--------+--------+
-             |
-             v
-    +--------+--------+
-    |    Thanos       |
-    |  (Long-term)    |
-    |  S3 storage     |
-    +--------+--------+
-             |
-             v
-    +--------+--------+
-    |     Grafana     |
-    |   (Dashboard)   |
-    +-----------------+
-
-Components:
+**Components:**
 1. Prometheus scrapes metrics from apps
 2. Prometheus stores 2 weeks locally
 3. Thanos ships to S3 for long-term
 4. Thanos Querier for unified query
 5. Grafana dashboards + alerts
-```
 
 ### Prometheus Design
 

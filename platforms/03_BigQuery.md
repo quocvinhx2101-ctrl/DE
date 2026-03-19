@@ -90,78 +90,64 @@ graph TD
 
 ### Storage Architecture
 
-```
-                    STORAGE LAYERS
-
-+----------------------------------------------------------+
-|                    BigQuery Datasets                      |
-|  +------------------+  +------------------+               |
-|  | Dataset A        |  | Dataset B        |               |
-|  | +------------+   |  | +------------+   |               |
-|  | | Table 1    |   |  | | Table 1    |   |               |
-|  | | Table 2    |   |  | | Table 2    |   |               |
-|  | +------------+   |  | +------------+   |               |
-|  +------------------+  +------------------+               |
-+----------------------------------------------------------+
-                           |
-                           v
-+----------------------------------------------------------+
-|                    Capacitor Format                       |
-|                                                          |
-|  Column-oriented storage with:                           |
-|  - Dictionary encoding                                   |
-|  - Run-length encoding                                   |
-|  - Delta encoding                                        |
-|  - Nested/repeated fields (STRUCT, ARRAY)               |
-+----------------------------------------------------------+
-                           |
-                           v
-+----------------------------------------------------------+
-|                    Colossus (GFS)                         |
-|                                                          |
-|  - Distributed file system                               |
-|  - Triple replication                                    |
-|  - Erasure coding                                        |
-|  - Automatic sharding                                    |
-+----------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph DS ["BigQuery Datasets"]
+        direction LR
+        subgraph DSA ["Dataset A"]
+            T1A["Table 1"]
+            T2A["Table 2"]
+        end
+        subgraph DSB ["Dataset B"]
+            T1B["Table 1"]
+            T2B["Table 2"]
+        end
+    end
+    
+    CAP["Capacitor Format<br>• Column-oriented storage<br>• Dictionary/RLE/Delta encoding<br>• Nested fields (STRUCT, ARRAY)"]
+    
+    COL["Colossus (GFS)<br>• Distributed file system<br>• Triple replication<br>• Erasure coding, Auto sharding"]
+    
+    DS --> CAP
+    CAP --> COL
 ```
 
 ### Query Execution
 
-```
-                    QUERY LIFECYCLE
-
-1. Query Submission
-   Client ──► BigQuery API ──► Query Planner
-
-2. Query Planning
-   +------------------+
-   | Parse SQL        |
-   +--------+---------+
-            |
-   +--------v---------+
-   | Semantic Analysis|
-   | (Schema lookup)  |
-   +--------+---------+
-            |
-   +--------v---------+
-   | Query Optimizer  |
-   | (Cost-based)     |
-   +--------+---------+
-            |
-   +--------v---------+
-   | Execution Plan   |
-   | (DAG of stages)  |
-   +------------------+
-
-3. Slot Allocation
-   Query ──► Slot Scheduler ──► Available Slots
-
-4. Distributed Execution
-   Slots process in parallel across Dremel tree
-
-5. Result Assembly
-   Leaf ──► Intermediate ──► Root ──► Client
+```mermaid
+flowchart TD
+    subgraph S1 ["1. Query Submission"]
+        direction LR
+        Client --> API["BigQuery API"] --> Planner["Query Planner"]
+    end
+    
+    subgraph S2 ["2. Query Planning"]
+        P1["Parse SQL"] --> P2["Semantic Analysis<br>(Schema lookup)"]
+        P2 --> P3["Query Optimizer<br>(Cost-based)"]
+        P3 --> P4["Execution Plan<br>(DAG of stages)"]
+    end
+    
+    S1 --> S2
+    
+    subgraph S3 ["3. Slot Allocation"]
+        direction LR
+        Query --> Sched["Slot Scheduler"] --> Slots["Available Slots"]
+    end
+    
+    S2 --> S3
+    
+    subgraph S4 ["4. Distributed Execution"]
+        Exec["Slots process in parallel across Dremel tree"]
+    end
+    
+    S3 --> S4
+    
+    subgraph S5 ["5. Result Assembly"]
+        direction LR
+        Leaf --> Inter["Intermediate"] --> Root --> ReturnClient["Client"]
+    end
+    
+    S4 --> S5
 ```
 
 ---
@@ -170,49 +156,34 @@ graph TD
 
 ### 1. Partitioning & Clustering
 
+```mermaid
+flowchart TD
+    subgraph P1 ["Time-unit Partitioning<br>PARTITION BY DATE(transaction_time)"]
+        direction LR
+        D1["2024-01-01"]
+        D2["2024-01-02"]
+        D3["2024-01-03..."]
+    end
+    
+    subgraph P2 ["Integer Range Partitioning<br>PARTITION BY RANGE_BUCKET(...)"]
+        direction LR
+        R1["0-100"]
+        R2["100-200"]
+        R3["200-300..."]
+    end
+    
+    subgraph CLUS ["Clustering<br>CLUSTER BY region, product_category"]
+        direction TB
+        C1["region=APAC, category=Electronics"]
+        C2["region=APAC, category=Fashion"]
+        C3["region=EU, category=Electronics"]
+    end
 ```
-                    PARTITIONING
 
-Time-unit Partitioning:
-+----------------------------------------------------------+
-| sales_data                                                |
-| PARTITION BY DATE(transaction_time)                       |
-|                                                          |
-| +------------+ +------------+ +------------+ +----------+ |
-| | 2024-01-01 | | 2024-01-02 | | 2024-01-03 | |   ...    | |
-| | Partition  | | Partition  | | Partition  | |          | |
-| +------------+ +------------+ +------------+ +----------+ |
-+----------------------------------------------------------+
-
-Integer Range Partitioning:
-+----------------------------------------------------------+
-| user_events                                               |
-| PARTITION BY RANGE_BUCKET(user_id, GENERATE_ARRAY(0,100)) |
-|                                                          |
-| +------------+ +------------+ +------------+ +----------+ |
-| | 0-100      | | 100-200    | | 200-300    | |   ...    | |
-| +------------+ +------------+ +------------+ +----------+ |
-+----------------------------------------------------------+
-
-                    CLUSTERING
-
-+----------------------------------------------------------+
-| sales_data                                                |
-| CLUSTER BY region, product_category                       |
-|                                                          |
-| Within each partition:                                   |
-| +------------------------------------------------------+ |
-| | region=APAC, category=Electronics | sorted together  | |
-| | region=APAC, category=Fashion     | sorted together  | |
-| | region=EU, category=Electronics   | sorted together  | |
-| +------------------------------------------------------+ |
-+----------------------------------------------------------+
-
-Benefits:
+**Benefits:**
 - Query pruning (read less data)
 - Co-located data for joins
 - Auto-reclustering (managed)
-```
 
 ### 2. Materialized Views
 
@@ -246,37 +217,29 @@ SELECT region, SUM(total_sales) FROM sales_summary GROUP BY region;
 
 ### 3. Streaming Inserts
 
+```mermaid
+flowchart TD
+    subgraph BUF ["Streaming Buffer"]
+        direction LR
+        S1["Stream 1<br>(in-mem)"]
+        S2["Stream 2<br>(in-mem)"]
+        SN["Stream N<br>(in-mem)"]
+    end
+    
+    CONS["Background Consolidation<br>(every few minutes)"]
+    
+    S1 --> CONS
+    S2 --> CONS
+    SN --> CONS
+    
+    COL["Columnar Storage"]
+    CONS --> COL
 ```
-                    STREAMING ARCHITECTURE
 
-+----------------------------------------------------------+
-|                   Streaming Buffer                        |
-|                                                          |
-|  +------------+  +------------+  +------------+          |
-|  | Stream 1   |  | Stream 2   |  | Stream N   |          |
-|  | (in-mem)   |  | (in-mem)   |  | (in-mem)   |          |
-|  +-----+------+  +-----+------+  +-----+------+          |
-|        |               |               |                  |
-|        +-------+-------+-------+-------+                  |
-|                |                                          |
-|        +-------v-------+                                  |
-|        | Background    |                                  |
-|        | Consolidation |                                  |
-|        | (every few    |                                  |
-|        |  minutes)     |                                  |
-|        +-------+-------+                                  |
-|                |                                          |
-|        +-------v-------+                                  |
-|        | Columnar      |                                  |
-|        | Storage       |                                  |
-|        +---------------+                                  |
-+----------------------------------------------------------+
-
-Insert modes:
-- insertAll API (streaming, ~$0.01/200MB)
-- LOAD job (batch, free)
+**Insert modes:**
+- `insertAll` API (streaming, ~$0.01/200MB)
+- `LOAD` job (batch, free)
 - Storage Write API (streaming, lower cost)
-```
 
 ### 4. Time Travel & Snapshots
 

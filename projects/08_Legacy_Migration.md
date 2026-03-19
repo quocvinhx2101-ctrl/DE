@@ -23,20 +23,42 @@ Migrate một legacy data pipeline (bash scripts + cron + raw SQL) sang modern s
 ### Legacy System (Hiện tại)
 
 ```
-Legacy Architecture:
-┌──────────────────────────────────────────────────┐
-│                    CRON JOBS                       │
-│  0 6 * * * /scripts/extract_sales.sh              │
-│  0 7 * * * /scripts/transform_sales.sh            │
-│  0 8 * * * /scripts/load_report.sh                │
-└──────────────────────────────────────────────────┘
-         │              │              │
-         ▼              ▼              ▼
-    extract_sales.sh  transform.sh   load_report.sh
-    (curl + jq)       (psql inline)  (psql + csvtool)
-         │              │              │
-         ▼              ▼              ▼
-    /tmp/sales.json   /tmp/clean.csv  report_table
+**Legacy Architecture:**
+```mermaid
+flowchart TD
+    subgraph CRON [" "]
+        direction TB
+        C_TITLE["CRON JOBS"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph JOBS [" "]
+            direction LR
+            J1["0 6 * * *<br>/scripts/extract_sales.sh"]
+            J2["0 7 * * *<br>/scripts/transform_sales.sh"]
+            J3["0 8 * * *<br>/scripts/load_report.sh"]
+        end
+        C_TITLE ~~~ JOBS
+    end
+    
+    E["extract_sales.sh<br>(curl + jq)"]
+    T["transform.sh<br>(psql inline)"]
+    L["load_report.sh<br>(psql + csvtool)"]
+    
+    J1 -.-> E
+    J2 -.-> T
+    J3 -.-> L
+    
+    OUT1["/tmp/sales.json"]
+    OUT2["/tmp/clean.csv"]
+    OUT3["report_table"]
+    
+    E --> OUT1
+    T --> OUT2
+    L --> OUT3
+    
+    style JOBS fill:none,stroke:none
+    style CRON fill:#f5f5f5,stroke:#9e9e9e
+```
 ```
 
 ### Problems với Legacy
@@ -55,18 +77,36 @@ Legacy Architecture:
 ### Target System (Modern)
 
 ```
-Modern Architecture:
-┌──────────────────────────────────────────────────┐
-│               Apache Airflow DAG                  │
-│  ┌─────────┐  ┌──────────┐  ┌─────────────────┐ │
-│  │ Extract  │→ │   dbt    │→ │  Data Quality   │ │
-│  │ (Python) │  │(Transform)│  │  (Great Expect) │ │
-│  └─────────┘  └──────────┘  └─────────────────┘ │
-└──────────────────────────────────────────────────┘
-         │              │              │
-         ▼              ▼              ▼
-    S3 (raw/)      PostgreSQL      Alerts + Dashboard
-    (Parquet)      (warehouse)     (Slack + Grafana)
+**Modern Architecture:**
+```mermaid
+flowchart TD
+    subgraph DAG [" "]
+        direction TB
+        D_TITLE["Apache Airflow DAG"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph TASKS [" "]
+            direction LR
+            EXT["Extract<br>(Python)"]
+            DBT["dbt<br>(Transform)"]
+            DQ["Data Quality<br>(Great Expect)"]
+            
+            EXT --> DBT --> DQ
+        end
+        D_TITLE ~~~ TASKS
+    end
+    
+    S3["S3 (raw/)<br>(Parquet)"]
+    PG["PostgreSQL<br>(warehouse)"]
+    ALERT["Alerts + Dashboard<br>(Slack + Grafana)"]
+    
+    EXT -.-> S3
+    DBT -.-> PG
+    DQ -.-> ALERT
+    
+    style TASKS fill:none,stroke:none
+    style DAG fill:#e3f2fd,stroke:#90caf9
+```
 ```
 
 ---
@@ -101,17 +141,33 @@ psql -c "SELECT COUNT(*) FROM report_table"  # Current state
 Strategy: Build new system ALONGSIDE old system
 NEVER turn off old system before new is verified
 
-┌─────────────┐     ┌─────────────┐
-│   Legacy     │     │    New      │
-│  (running)   │     │ (building)  │
-│              │     │             │
-│ cron → bash  │     │ Airflow     │
-│ → psql       │     │ → dbt       │
-│ → report     │     │ → DQ        │
-└─────────────┘     └─────────────┘
-     ↓                    ↓
-  report_table      report_table_v2
-  (consumers use)   (testing only)
+```mermaid
+flowchart TD
+    subgraph LEGACY [" "]
+        direction TB
+        L_TITLE["Legacy (running)"]
+        style L_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        L_FLOW["cron → bash → psql → report"]
+        L_TITLE ~~~ L_FLOW
+    end
+    
+    subgraph NEW [" "]
+        direction TB
+        N_TITLE["New (building)"]
+        style N_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        N_FLOW["Airflow → dbt → DQ"]
+        N_TITLE ~~~ N_FLOW
+    end
+    
+    OUT_L["report_table<br>(consumers use)"]
+    OUT_N["report_table_v2<br>(testing only)"]
+    
+    LEGACY --> OUT_L
+    NEW --> OUT_N
+    
+    style LEGACY fill:#ffebee,stroke:#ef5350
+    style NEW fill:#e8f5e9,stroke:#66bb6a
+```
 ```
 
 ### Phase 2: Dual-Run Verification (Week 2)

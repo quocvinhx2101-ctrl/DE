@@ -319,25 +319,12 @@ Silence = consent. If you don't comment, you agree.
 
 ### The Reversibility Framework
 
-```
-               LOW IMPACT                HIGH IMPACT
-          ┌────────────────────┬────────────────────────┐
-          │                    │                        │
-REVERSIBLE│  "Just do it"      │  "Experiment"          │
-          │  Decide in < 1 day │  Time-box POC: 2 weeks │
-          │                    │  Measure results       │
-          │  Ex: Which linter  │  Ex: Try Dagster for   │
-          │  to use            │  1 pipeline             │
-          ├────────────────────┼────────────────────────┤
-          │                    │                        │
-IRREVERSI-│  "Write it down"   │  "Full process"        │
-BLE       │  Light RFC, 1 week │  RFC + POC + committee │
-          │  Document rationale│  Stakeholder alignment │
-          │                    │  1-3 month process     │
-          │  Ex: Naming        │  Ex: Choose warehouse  │
-          │  convention        │  (Snowflake vs BQ)     │
-          └────────────────────┴────────────────────────┘
-```
+**The Reversibility Framework:**
+
+| | **LOW IMPACT** | **HIGH IMPACT** |
+|---|---|---|
+| **REVERSIBLE** | **"Just do it"**<br>- Decide in < 1 day<br>- Ex: Which linter to use | **"Experiment"**<br>- Time-box POC: 2 weeks<br>- Measure results<br>- Ex: Try Dagster for 1 pipeline |
+| **IRREVERSIBLE** | **"Write it down"**<br>- Light RFC, 1 week<br>- Document rationale<br>- Ex: Naming convention | **"Full process"**<br>- RFC + POC + committee<br>- Stakeholder alignment (1-3 mos)<br>- Ex: Choose warehouse (Snowflake vs BQ) |
 
 ### Scenario: PM Wants Real-Time Dashboard
 

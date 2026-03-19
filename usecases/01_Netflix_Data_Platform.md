@@ -89,26 +89,20 @@ graph TD
   - Anomaly detection
   - Cost attribution
 
-```
-MANTIS ARCHITECTURE:
-
-Job Cluster                    
-┌─────────────────────────────────┐
-│  ┌─────────┐     ┌─────────┐   │
-│  │ Source  │────>│ Stage 1 │   │
-│  │ (Kafka) │     │ (Filter)│   │
-│  └─────────┘     └────┬────┘   │
-│                       │         │
-│                  ┌────v────┐   │
-│                  │ Stage 2 │   │
-│                  │(Aggregate)  │
-│                  └────┬────┘   │
-│                       │         │
-│                  ┌────v────┐   │
-│                  │  Sink   │   │
-│                  │ (Output)│   │
-│                  └─────────┘   │
-└─────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MAN [" "]
+        direction TB
+        M_TITLE["MANTIS ARCHITECTURE"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CLSTR ["Job Cluster"]
+            direction TB
+            S1["Source<br>(Kafka)"] --> S2["Stage 1<br>(Filter)"]
+            S2 --> S3["Stage 2<br>(Aggregate)"]
+            S3 --> S4["Sink<br>(Output)"]
+        end
+    end
 ```
 
 ### 2. Storage Layer
@@ -121,29 +115,25 @@ Job Cluster
   - Hidden partitioning
   - Time travel
 
-```
-ICEBERG AT NETFLIX:
-
-┌──────────────────────────────────┐
-│          S3 (Storage)            │
-│  ┌────────────────────────────┐  │
-│  │   Parquet Data Files       │  │
-│  │   (Petabytes)              │  │
-│  └────────────────────────────┘  │
-│  ┌────────────────────────────┐  │
-│  │   Iceberg Metadata         │  │
-│  │   - Manifests              │  │
-│  │   - Snapshots              │  │
-│  │   - Schema versions        │  │
-│  └────────────────────────────┘  │
-└──────────────────────────────────┘
-           │
-           v
-┌──────────────────────────────────┐
-│     Iceberg Catalog (Hive)       │
-│  - Table locations               │
-│  - Current snapshot pointer      │
-└──────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ICE [" "]
+        direction TB
+        I_TITLE["ICEBERG AT NETFLIX"]
+        style I_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph S3 ["S3 (Storage)"]
+            direction TB
+            D["Parquet Data Files<br>(Petabytes)"]
+            M["Iceberg Metadata<br>- Manifests<br>- Snapshots<br>- Schema versions"]
+            D ~~~ M
+        end
+        style S3 fill:none,stroke:#333
+        
+        CAT["Iceberg Catalog (Hive)<br>- Table locations<br>- Current snapshot pointer"]
+        
+        S3 --> CAT
+    end
 ```
 
 **S3 (Amazon)**
@@ -170,34 +160,19 @@ ICEBERG AT NETFLIX:
 - Data: Sub-second query latency
 - Metrics: Playback quality, errors
 
-```
-DRUID USE CASE:
-
-Event Stream (Kafka)
-         │
-         v
-┌─────────────────────┐
-│   Druid Real-time   │
-│   Ingestion         │
-└──────────┬──────────┘
-           │
-           v
-┌─────────────────────┐     ┌─────────────────────┐
-│   Druid Historical  │<────│   Deep Storage (S3) │
-│   Nodes             │     │                     │
-└──────────┬──────────┘     └─────────────────────┘
-           │
-           v
-┌─────────────────────┐
-│   Druid Broker      │
-│   (Query routing)   │
-└──────────┬──────────┘
-           │
-           v
-    ┌──────────────┐
-    │  Dashboard   │
-    │  (Grafana)   │
-    └──────────────┘
+```mermaid
+flowchart TD
+    subgraph DRUID [" "]
+        direction TB
+        D_TITLE["DRUID USE CASE"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        ES["Event Stream (Kafka)"] --> RI["Druid Real-time<br>Ingestion"]
+        RI --> HN["Druid Historical<br>Nodes"]
+        DS["Deep Storage (S3)"] --> HN
+        HN --> BR["Druid Broker<br>(Query routing)"]
+        BR --> DB["Dashboard<br>(Grafana)"]
+    end
 ```
 
 ---
@@ -214,38 +189,23 @@ Event Stream (Kafka)
 
 **HOW - Implementation:**
 
-```
-RECOMMENDATION PIPELINE:
-
-User Viewing History              Content Catalog
-         │                               │
-         v                               v
-┌─────────────────┐            ┌─────────────────┐
-│ User Embeddings │            │Content Embeddings│
-│ (Spark ML)      │            │ (Deep Learning) │
-└────────┬────────┘            └────────┬────────┘
-         │                               │
-         └───────────────┬───────────────┘
-                         │
-                         v
-            ┌────────────────────────┐
-            │   Candidate Generation │
-            │   (Nearest Neighbor)   │
-            └────────────┬───────────┘
-                         │
-                         v
-            ┌────────────────────────┐
-            │   Ranking Model        │
-            │   (Personalized)       │
-            └────────────┬───────────┘
-                         │
-                         v
-            ┌────────────────────────┐
-            │   A/B Test Assignment  │
-            └────────────┬───────────┘
-                         │
-                         v
-                  User Home Page
+```mermaid
+flowchart TD
+    subgraph REC [" "]
+        direction TB
+        R_TITLE["RECOMMENDATION PIPELINE"]
+        style R_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        UH["User Viewing History"] --> UE["User Embeddings<br>(Spark ML)"]
+        CC["Content Catalog"] --> CE["Content Embeddings<br>(Deep Learning)"]
+        
+        UE --> CG["Candidate Generation<br>(Nearest Neighbor)"]
+        CE --> CG
+        
+        CG --> RM["Ranking Model<br>(Personalized)"]
+        RM --> AB["A/B Test Assignment"]
+        AB --> UP["User Home Page"]
+    end
 ```
 
 **Technologies used:**
@@ -272,43 +232,24 @@ User Viewing History              Content Catalog
 
 **HOW - Implementation:**
 
-```
-A/B TESTING FLOW:
-
-┌─────────────────┐
-│ Experiment      │
-│ Configuration   │
-│ (who, what, %)  │
-└────────┬────────┘
-         │
-         v
-┌─────────────────┐     ┌─────────────────┐
-│ Allocation      │────>│ User Assignment │
-│ Service         │     │ (consistent)    │
-└─────────────────┘     └────────┬────────┘
-                                 │
-         ┌───────────────────────┤
-         │                       │
-         v                       v
-┌─────────────┐          ┌─────────────┐
-│ Treatment A │          │ Treatment B │
-│ (Control)   │          │ (Variant)   │
-└──────┬──────┘          └──────┬──────┘
-       │                        │
-       └────────────┬───────────┘
-                    │
-                    v
-         ┌─────────────────┐
-         │ Event Logging   │
-         │ (Kafka)         │
-         └────────┬────────┘
-                  │
-                  v
-         ┌─────────────────┐
-         │ Statistical     │
-         │ Analysis        │
-         │ (Spark/Python)  │
-         └─────────────────┘
+```mermaid
+flowchart TD
+    subgraph ABT [" "]
+        direction TB
+        A_TITLE["A/B TESTING FLOW"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        EC["Experiment<br>Configuration<br>(who, what, %)"] --> AS["Allocation<br>Service"]
+        AS --> UA["User Assignment<br>(consistent)"]
+        
+        UA --> TA["Treatment A<br>(Control)"]
+        UA --> TB2["Treatment B<br>(Variant)"]
+        
+        TA --> EL["Event Logging<br>(Kafka)"]
+        TB2 --> EL
+        
+        EL --> SA["Statistical<br>Analysis<br>(Spark/Python)"]
+    end
 ```
 
 **WHY - Lý do & Impact:**

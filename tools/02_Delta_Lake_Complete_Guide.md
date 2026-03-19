@@ -86,70 +86,25 @@ Delta Lake là một **open-source storage layer** mang đến reliability cho D
 
 ### Tổng Quan Kiến Trúc
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Application Layer                             │
-│              (Spark, Flink, Trino, Presto, Redshift)                 │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Delta Lake APIs                              │
-│                    (Spark, Rust, Python, Java)                       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Delta Transaction Log                             │
-│                  (_delta_log directory)                              │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                Transaction Log Files                          │   │
-│  │  000000000000000000.json  ─► Initial table creation           │   │
-│  │  000000000000000001.json  ─► First transaction                │   │
-│  │  000000000000000002.json  ─► Second transaction               │   │
-│  │  ...                                                          │   │
-│  │  000000000000000010.checkpoint.parquet ─► Checkpoint          │   │
-│  │  ...                                                          │   │
-│  │  _last_checkpoint  ─► Points to latest checkpoint             │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  Transaction Log Entry Contents:                                     │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  • commitInfo: timestamp, operation, operationParameters      │   │
-│  │  • add: file path, size, stats, partitionValues              │   │
-│  │  • remove: file path, deletionTimestamp                       │   │
-│  │  • metaData: schema, partitioning, format, properties        │   │
-│  │  • protocol: minReaderVersion, minWriterVersion              │   │
-│  │  • txn: appId, version (for streaming)                       │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Data Files (Parquet)                          │
-│                                                                      │
-│  my_table/                                                           │
-│  ├── _delta_log/                                                     │
-│  │   ├── 00000000000000000000.json                                   │
-│  │   ├── 00000000000000000001.json                                   │
-│  │   ├── ...                                                         │
-│  │   ├── 00000000000000000010.checkpoint.parquet                     │
-│  │   └── _last_checkpoint                                            │
-│  ├── date=2024-01-15/                                                │
-│  │   ├── part-00000-abc123.snappy.parquet                            │
-│  │   └── part-00001-def456.snappy.parquet                            │
-│  └── date=2024-01-16/                                                │
-│      └── part-00000-ghi789.snappy.parquet                            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Object Storage                                  │
-│                 (S3, ADLS, GCS, HDFS, Local)                         │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    APP["Application Layer<br>(Spark, Flink, Trino, Presto, Redshift)"]
+    API["Delta Lake APIs<br>(Spark, Rust, Python, Java)"]
+    
+    subgraph LOG [" "]
+        direction TB
+        L_TITLE["Delta Transaction Log (_delta_log)"]
+        style L_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        LOG_FILES["Transaction Log Files<br>• 00...00.json (Init)<br>• 00...01.json (Txn)<br>• 00...10.checkpoint.parquet<br>• _last_checkpoint"]
+        LOG_ENTRIES["Entry Contents:<br>• commitInfo<br>• add/remove<br>• metaData<br>• protocol<br>• txn"]
+        LOG_FILES ~~~ LOG_ENTRIES
+    end
+    
+    DATA["Data Files (Parquet)<br>Partitioned by date"]
+    STORE["Object Storage<br>(S3, ADLS, GCS, HDFS, Local)"]
+    
+    APP --> API --> LOG --> DATA --> STORE
 ```
 
 ### Transaction Log Chi Tiết
@@ -216,22 +171,11 @@ Mỗi 10 commits (default), Delta Lake tạo checkpoint file (Parquet format):
 
 ### 1. ACID Transactions
 
-```
-ACID Properties in Delta Lake:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Atomicity:     All operations trong transaction succeed hoặc   │
-│                 fail together                                    │
-│                                                                  │
-│  Consistency:   Table luôn ở valid state                        │
-│                                                                  │
-│  Isolation:     Concurrent transactions không interfere         │
-│                 (Serializable hoặc WriteSerializable)           │
-│                                                                  │
-│  Durability:    Committed transactions persist                  │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+**ACID Properties in Delta Lake:**
+* **Atomicity:** All operations in a transaction succeed or fail together
+* **Consistency:** Table always in a valid state
+* **Isolation:** Concurrent transactions don't interfere (Serializable or WriteSerializable)
+* **Durability:** Committed transactions persist
 
 #### Isolation Levels
 
@@ -372,38 +316,38 @@ spark.sql("""
 
 Delta UniForm cho phép Delta tables được đọc bằng **Apache Iceberg** và **Apache Hudi** clients, không cần copy hay convert data.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Delta UniForm                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │                  Delta Table (Source)                    │   │
-│   │            (Single copy of data)                         │   │
-│   └───────────────────────┬─────────────────────────────────┘   │
-│                           │                                      │
-│          ┌────────────────┼────────────────┐                     │
-│          ▼                ▼                ▼                     │
-│   ┌────────────┐   ┌────────────┐   ┌────────────┐              │
-│   │   Delta    │   │  Iceberg   │   │   Hudi     │              │
-│   │  Metadata  │   │  Metadata  │   │  Metadata  │              │
-│   │  (native)  │   │  (auto-gen)│   │  (auto-gen)│              │
-│   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘              │
-│         │                │                │                      │
-│         ▼                ▼                ▼                      │
-│   ┌────────────┐   ┌────────────┐   ┌────────────┐              │
-│   │   Spark    │   │   Trino    │   │   Presto   │              │
-│   │   Flink    │   │   Athena   │   │ Other Hudi │              │
-│   │   etc.     │   │  BigQuery  │   │  clients   │              │
-│   └────────────┘   └────────────┘   └────────────┘              │
-│                                                                  │
-│   Benefits:                                                      │
-│   ✅ Single copy of data                                         │
-│   ✅ Automatic metadata sync                                     │
-│   ✅ Multi-engine access                                         │
-│   ✅ No ETL needed                                               │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph UNIFORM [" "]
+        direction TB
+        U_TITLE["Delta UniForm"]
+        style U_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Delta Table (Source)<br>Single copy of data"]
+        
+        subgraph META [" "]
+            direction LR
+            DM["Delta Metadata"]
+            IM["Iceberg Metadata"]
+            HM["Hudi Metadata"]
+        end
+        
+        subgraph CLIENTS [" "]
+            direction LR
+            S["Spark/Flink"]
+            T["Trino/Athena/BQ"]
+            P["Presto/Other"]
+        end
+        
+        SRC --> META
+        DM --> S
+        IM --> T
+        HM --> P
+    end
+    
+    BENS["Benefits:<br>✅ Single copy of data<br>✅ Automatic metadata sync<br>✅ Multi-engine access<br>✅ No ETL needed"]
+    style BENS fill:none,stroke:none,text-align:left
+    UNIFORM ~~~ BENS
 ```
 
 ### Enable UniForm
@@ -742,43 +686,34 @@ dt.optimize.z_order(["department", "name"])
 
 ### 2. Comcast - Media Analytics
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Comcast Media Analytics                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   Set-top Boxes         Streaming Apps                       │
-│       │                      │                               │
-│       └──────────┬───────────┘                               │
-│                  ▼                                           │
-│           ┌────────────┐                                     │
-│           │   Kafka    │                                     │
-│           └─────┬──────┘                                     │
-│                 │                                            │
-│       ┌─────────┴─────────┐                                  │
-│       ▼                   ▼                                  │
-│ ┌───────────┐      ┌───────────┐                             │
-│ │  Streaming│      │   Batch   │                             │
-│ │  (Spark)  │      │  (Spark)  │                             │
-│ └─────┬─────┘      └─────┬─────┘                             │
-│       │                  │                                   │
-│       └────────┬─────────┘                                   │
-│                ▼                                             │
-│        ┌─────────────┐                                       │
-│        │ Delta Lake  │                                       │
-│        │  (unified)  │                                       │
-│        └──────┬──────┘                                       │
-│               ▼                                              │
-│    ┌──────────────────────┐                                  │
-│    │   BI / ML / Reports  │                                  │
-│    └──────────────────────┘                                  │
-│                                                              │
-│   Results:                                                   │
-│   • 10x faster pipelines                                     │
-│   • Single source of truth                                   │
-│   • Real-time dashboards                                     │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph COMCAST [" "]
+        direction TB
+        C_TITLE["Comcast Media Analytics"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Set-top Boxes & Streaming Apps"]
+        KAFKA["Kafka"]
+        
+        subgraph PROC [" "]
+            direction LR
+            STR["Streaming (Spark)"]
+            BAT["Batch (Spark)"]
+        end
+        
+        DELTA["Delta Lake (unified)"]
+        BI["BI / ML / Reports"]
+        
+        SRC --> KAFKA
+        KAFKA --> STR & BAT
+        STR & BAT --> DELTA
+        DELTA --> BI
+    end
+    
+    RES["Results:<br>• 10x faster pipelines<br>• Single source of truth<br>• Real-time dashboards"]
+    style RES fill:none,stroke:none,text-align:left
+    COMCAST ~~~ RES
 ```
 
 ### 3. CDC Pipeline cho Order Management

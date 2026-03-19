@@ -260,29 +260,39 @@ ALTER TABLE users DROP COLUMN price_old;
 ```
 Safest pattern for production migrations
 
-Phase 1 - EXPAND:
-┌────────┐    ┌──────────┐
-│ Old Col │    │ New Col  │
-│ (used)  │    │ (empty)  │
-└────────┘    └──────────┘
-→ Add new column, keep old column
-→ Code writes to BOTH columns
+```mermaid
+flowchart TD
+    subgraph P1 ["Phase 1 - EXPAND"]
+        direction LR
+        O1["Old Col<br>(used)"]:::oldCol
+        N1["New Col<br>(empty)"]:::newColEmpty
+    end
+    
+    P1_DESC["→ Add new column, keep old column<br>→ Code writes to BOTH columns"]:::descNode
 
-Phase 2 - MIGRATE:
-┌────────┐    ┌──────────┐
-│ Old Col │    │ New Col  │
-│ (used)  │───→│ (filled) │
-└────────┘    └──────────┘
-→ Backfill new column from old
-→ Code reads from NEW column
+    subgraph P2 ["Phase 2 - MIGRATE"]
+        direction LR
+        O2["Old Col<br>(used)"]:::oldCol
+        N2["New Col<br>(filled)"]:::newColFilled
+        O2 --"Backfill"--> N2
+    end
+    
+    P2_DESC["→ Backfill new column from old<br>→ Code reads from NEW column"]:::descNode
 
-Phase 3 - CONTRACT:
-                ┌──────────┐
-                │ New Col  │
-                │ (active) │
-                └──────────┘
-→ Remove old column
-→ Code only uses new column
+    subgraph P3 ["Phase 3 - CONTRACT"]
+        direction LR
+        N3["New Col<br>(active)"]:::newColFilled
+    end
+    
+    P3_DESC["→ Remove old column<br>→ Code only uses new column"]:::descNode
+    
+    P1 --> P1_DESC --> P2 --> P2_DESC --> P3 --> P3_DESC
+    
+    classDef oldCol fill:#ffcdd2,stroke:#e53935
+    classDef newColEmpty fill:#f5f5f5,stroke:#bdbdbd,stroke-dasharray: 5 5
+    classDef newColFilled fill:#c8e6c9,stroke:#43a047
+    classDef descNode fill:#fff9c4,stroke:none
+```
 ```
 
 ```python

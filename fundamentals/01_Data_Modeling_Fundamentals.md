@@ -476,16 +476,14 @@ CREATE TABLE fact_store_product_coverage (
 - Single source of truth
 - Enables cross-process analysis
 
-```d
-dim_customer (Conformed)
-        |
-        +-----> fact_sales
-        |
-        +-----> fact_returns
-        |
-        +-----> fact_web_clicks
-        |
-        +-----> fact_support_tickets
+```mermaid
+flowchart LR
+    DC["dim_customer<br>(Conformed)"]
+    
+    DC --> FS["fact_sales"]
+    DC --> FR["fact_returns"]
+    DC --> FW["fact_web_clicks"]
+    DC --> FST["fact_support_tickets"]
 ```
 
 **Role-Playing Dimensions:**

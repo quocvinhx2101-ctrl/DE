@@ -77,26 +77,31 @@ graph TD
 
 **Origin:** Airbnb created in 2014, open-sourced 2015, Apache top-level 2019
 
+```mermaid
+flowchart TD
+    subgraph AIRFLOW [" "]
+        direction TB
+        A_TITLE["AIRFLOW ARCHITECTURE"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph COMPONENTS [" "]
+            direction LR
+            WS["Web Server<br>(UI)"]
+            SCH["Scheduler<br>(DAG runs)"]
+            EX["Executor<br>(Workers)"]
+        end
+        style COMPONENTS fill:none,stroke:none
+        
+        DB["Metadata DB<br>(PostgreSQL)"]
+        
+        WS --> DB
+        SCH --> DB
+        EX --> DB
+    end
 ```
-AIRFLOW ARCHITECTURE:
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        AIRFLOW                                   │
-│                                                                  │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐    │
-│  │ Web Server   │     │ Scheduler    │     │ Executor     │    │
-│  │ (UI)         │     │ (DAG runs)   │     │ (Workers)    │    │
-│  └──────────────┘     └──────┬───────┘     └──────┬───────┘    │
-│                              │                     │            │
-│                              v                     v            │
-│                    ┌─────────────────────────────────────┐     │
-│                    │           Metadata DB               │     │
-│                    │        (PostgreSQL)                 │     │
-│                    └─────────────────────────────────────┘     │
-└─────────────────────────────────────────────────────────────────┘
-
-
-DAG EXAMPLE (Airbnb style):
+```python
+# DAG EXAMPLE (Airbnb style):
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -124,157 +129,104 @@ with DAG(
     )
 
     extract >> transform >> load
-
-
-AIRFLOW AT AIRBNB:
-
-Scale:
-- 10,000s of DAGs
-- 100,000s of tasks/day
-- Manages all batch ETL
-
-Key features used:
-- Dynamic DAG generation
-- Task dependencies
-- Backfill capabilities
-- SLA monitoring
 ```
+
+> **AIRFLOW AT AIRBNB:**
+> 
+> * **Scale:**
+>   * 10,000s of DAGs
+>   * 100,000s of tasks/day
+>   * Manages all batch ETL
+> 
+> * **Key features used:**
+>   * Dynamic DAG generation
+>   * Task dependencies
+>   * Backfill capabilities
+>   * SLA monitoring
 
 ### 2. Minerva (Metrics Layer)
 
+```mermaid
+flowchart TD
+    subgraph MINERVA [" "]
+        direction TB
+        M_TITLE["MINERVA<br>(Single source of truth for metrics)"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        MD["Metric Definitions<br>metric:<br>  name: bookings<br>  type: count<br>  source: fact_reservations<br>  dimensions: [country, platform, room_type]<br>  filters:<br>    - status = 'confirmed'"]
+        
+        CE["Computation Engine<br>- Aggregates metrics on demand<br>- Caches common queries<br>- Serves to Superset, APIs, notebooks"]
+        
+        MD --> CE
+    end
 ```
-MINERVA ARCHITECTURE:
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        MINERVA                                   │
-│               (Single source of truth for metrics)              │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                 Metric Definitions                        │   │
-│  │  ┌─────────────────────────────────────────────────────┐ │   │
-│  │  │ metric:                                              │ │   │
-│  │  │   name: bookings                                     │ │   │
-│  │  │   type: count                                        │ │   │
-│  │  │   source: fact_reservations                          │ │   │
-│  │  │   dimensions: [country, platform, room_type]         │ │   │
-│  │  │   filters:                                           │ │   │
-│  │  │     - status = 'confirmed'                           │ │   │
-│  │  └─────────────────────────────────────────────────────┘ │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Computation Engine                           │   │
-│  │  - Aggregates metrics on demand                          │   │
-│  │  - Caches common queries                                 │   │
-│  │  - Serves to Superset, APIs, notebooks                   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-
-
-KEY BENEFITS:
-
-1. Single Source of Truth:
-   - "Bookings" defined once
-   - Everyone uses same definition
-   - No dashboard discrepancies
-
-2. Dimension Consistency:
-   - Standard dimensions across metrics
-   - Drill-down always works
-   - Comparable across reports
-
-3. Self-Service:
-   - Business users can explore
-   - No need to write SQL
-   - Governed access
-```
+> **KEY BENEFITS:**
+> 
+> 1. Single Source of Truth:
+>    - "Bookings" defined once
+>    - Everyone uses same definition
+>    - No dashboard discrepancies
+> 
+> 2. Dimension Consistency:
+>    - Standard dimensions across metrics
+>    - Drill-down always works
+>    - Comparable across reports
+> 
+> 3. Self-Service:
+>    - Business users can explore
+>    - No need to write SQL
+>    - Governed access
 
 ### 3. Apache Superset (Airbnb Created)
 
 **Origin:** Airbnb created, now Apache top-level project
 
-```
-SUPERSET FEATURES:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        SUPERSET                                  │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Dashboard                               │   │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │   │
-│  │  │ Chart 1 │ │ Chart 2 │ │ Chart 3 │ │ Chart 4 │        │   │
-│  │  │ (Bar)   │ │ (Line)  │ │ (Pie)   │ │ (Map)   │        │   │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Features:                                                       │
-│  - SQL Lab (explore data)                                       │
-│  - 40+ visualization types                                      │
-│  - Semantic layer (metrics/dimensions)                          │
-│  - Role-based access control                                    │
-│  - Alerts and reports                                           │
-│                                                                  │
-│  Connectors:                                                     │
-│  - Presto/Trino                                                 │
-│  - PostgreSQL                                                   │
-│  - MySQL                                                        │
-│  - BigQuery                                                     │
-│  - Druid                                                        │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **SUPERSET FEATURES:**
+> 
+> * **Dashboard Components:** Line, Bar, Pie, Map charts
+> * **Features:**
+>   * SQL Lab (explore data)
+>   * 40+ visualization types
+>   * Semantic layer (metrics/dimensions)
+>   * Role-based access control
+>   * Alerts and reports
+> * **Connectors:** Presto/Trino, PostgreSQL, MySQL, BigQuery, Druid
 
 ### 4. Zipline (Feature Store)
 
+```mermaid
+flowchart TD
+    subgraph ZIPLINE [" "]
+        direction TB
+        Z_TITLE["ZIPLINE<br>(Declarative Feature Engineering)"]
+        style Z_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        FD["Feature Definition<br>class HostFeatures(Feature):<br>    source = Source.HIVE_TABLE('fact_listings')<br>    keys = ['host_id']<br>    total_listings = Feature(...)<br>    avg_rating = Feature(...)"]
+        
+        subgraph STORES [" "]
+            direction LR
+            OS1["Offline Store<br>(Hive/S3)<br>- Training"]
+            OS2["Online Store<br>(Redis)<br>- Serving"]
+        end
+        style STORES fill:none,stroke:none
+        
+        FD --> OS1
+        FD --> OS2
+    end
 ```
-ZIPLINE ARCHITECTURE:
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        ZIPLINE                                   │
-│               (Declarative Feature Engineering)                 │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                Feature Definition                         │   │
-│  │                                                           │   │
-│  │  class HostFeatures(Feature):                             │   │
-│  │      """Features for host."""                             │   │
-│  │                                                           │   │
-│  │      source = Source.HIVE_TABLE("fact_listings")          │   │
-│  │      keys = ["host_id"]                                   │   │
-│  │                                                           │   │
-│  │      total_listings = Feature(                            │   │
-│  │          expr=F.count("listing_id"),                      │   │
-│  │          window=Window.UNBOUNDED                          │   │
-│  │      )                                                    │   │
-│  │                                                           │   │
-│  │      avg_rating = Feature(                                │   │
-│  │          expr=F.avg("rating"),                            │   │
-│  │          window=Window.DAYS_90                            │   │
-│  │      )                                                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│              ┌───────────────┴───────────────┐                  │
-│              v                               v                  │
-│  ┌──────────────────┐           ┌──────────────────┐           │
-│  │ Offline Store    │           │ Online Store     │           │
-│  │ (Hive/S3)        │           │ (Redis)          │           │
-│  │ - Training       │           │ - Serving        │           │
-│  └──────────────────┘           └──────────────────┘           │
-└─────────────────────────────────────────────────────────────────┘
-
-
-TRAINING vs SERVING:
-
-Training (Offline):
-- Historical features at specific timestamps
-- Point-in-time correctness
-- Large batch retrieval
-
-Serving (Online):
-- Latest feature values
-- Low latency (<10ms)
-- Key-value lookup
-```
+> **TRAINING vs SERVING:**
+> 
+> * **Training (Offline):**
+>   * Historical features at specific timestamps
+>   * Point-in-time correctness
+>   * Large batch retrieval
+> 
+> * **Serving (Online):**
+>   * Latest feature values
+>   * Low latency (<10ms)
+>   * Key-value lookup
 
 ---
 
@@ -291,64 +243,33 @@ Serving (Online):
 **HOW - Implementation:**
 
 ```
-SEARCH RANKING PIPELINE:
+```mermaid
+flowchart TD
+    subgraph SEARCH [" "]
+        direction TB
+        S_TITLE["SEARCH RANKING PIPELINE"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        QRY["User Search Query"]
+        QU["Query Understanding<br>- Location parsing<br>- Date normalization<br>- Intent detection"]
+        CR["Candidate Retrieval<br>- Elasticsearch (listings)<br>- Geo filtering<br>- Availability check"]
+        RM["Ranking Model<br>- Guest features (Zipline)<br>- Listing features (Zipline)<br>- Context features (real-time)<br>- GBDT/Neural ranking model"]
+        BR["Business Rules<br>- Diversity (location, price)<br>- Fairness constraints<br>- Superhost boost"]
+        RES["Search Results"]
+        
+        QRY --> QU
+        QU --> CR
+        CR --> RM
+        RM --> BR
+        BR --> RES
+    end
+```
 
-User Search Query
-       │
-       v
-┌──────────────────────────────────────────┐
-│ Query Understanding                       │
-│ - Location parsing                        │
-│ - Date normalization                      │
-│ - Intent detection                        │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Candidate Retrieval                       │
-│ - Elasticsearch (listings)                │
-│ - Geo filtering                           │
-│ - Availability check                      │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Ranking Model                             │
-│ - Guest features (Zipline)                │
-│ - Listing features (Zipline)              │
-│ - Context features (real-time)            │
-│ - GBDT/Neural ranking model               │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Business Rules                            │
-│ - Diversity (location, price)             │
-│ - Fairness constraints                    │
-│ - Superhost boost                         │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-         Search Results
-
-
-FEATURES USED:
-
-Guest features:
-- Search history
-- Booking history
-- Price sensitivity
-
-Listing features:
-- Reviews and ratings
-- Response rate
-- Instant book available
-- Photos quality score
-
-Context features:
-- Search location
-- Check-in/out dates
-- Number of guests
+> **FEATURES USED:**
+> 
+> * **Guest features:** Search history, Booking history, Price sensitivity
+> * **Listing features:** Reviews and ratings, Response rate, Instant book available, Photos quality score
+> * **Context features:** Search location, Check-in/out dates, Number of guests
 ```
 
 **WHY - Lý do & Impact:**
@@ -370,36 +291,24 @@ Context features:
 **HOW - Implementation:**
 
 ```
-SMART PRICING SYSTEM:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    SMART PRICING                                 │
-│                                                                  │
-│  Input Features:                                                 │
-│  ├── Historical booking data                                    │
-│  ├── Seasonal patterns                                          │
-│  ├── Local events (concerts, conferences)                       │
-│  ├── Competitor pricing                                         │
-│  ├── Listing characteristics                                    │
-│  └── Lead time to check-in                                      │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              ML Model (per listing)                       │   │
-│  │  - Demand forecasting                                     │   │
-│  │  - Price elasticity estimation                            │   │
-│  │  - Optimal price calculation                              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Price Recommendations                        │   │
-│  │                                                           │   │
-│  │   Mon  Tue  Wed  Thu  Fri  Sat  Sun                      │   │
-│  │   $89  $89  $95  $95  $129 $149 $119                     │   │
-│  │                                                           │   │
-│  │   Events detected: [Conference: +20%]                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SMART [" "]
+        direction TB
+        S_TITLE["SMART PRICING"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        IF["Input Features:<br>├── Historical booking data<br>├── Seasonal patterns<br>├── Local events (concerts, conferences)<br>├── Competitor pricing<br>├── Listing characteristics<br>└── Lead time to check-in"]
+        style IF fill:none,stroke:none,text-align:left
+        
+        ML["ML Model (per listing)<br>- Demand forecasting<br>- Price elasticity estimation<br>- Optimal price calculation"]
+        
+        REC["Price Recommendations<br>Mon($89), Tue($89), Wed($95), Thu($95), Fri($129), Sat($149), Sun($119)<br>Events detected: [Conference: +20%]"]
+        
+        IF --> ML
+        ML --> REC
+    end
+```
 ```
 
 **WHY - Lý do & Impact:**
@@ -421,98 +330,70 @@ SMART PRICING SYSTEM:
 **HOW - Implementation:**
 
 ```
-TRUST PLATFORM:
+```mermaid
+flowchart TD
+    subgraph TRUST [" "]
+        direction TB
+        T_TITLE["TRUST & SAFETY"]
+        style T_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph INPUTS [" "]
+            direction LR
+            IV["Identity<br>Verification"]
+            RS["Risk Scoring<br>(Booking)"]
+        end
+        style INPUTS fill:none,stroke:none
+        
+        EVAL["Real-time Risk Evaluation<br><br>Signals:<br>- Account age<br>- Verification status<br>- Payment method<br>- Device fingerprint<br>- Behavioral patterns<br>- Message content (NLP)<br><br>Actions:<br>- Approve<br>- Require verification<br>- Manual review<br>- Block"]
+        
+        INPUTS --> EVAL
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    TRUST & SAFETY                                │
-│                                                                  │
-│  ┌─────────────────┐     ┌─────────────────┐                   │
-│  │ Identity        │     │ Risk Scoring    │                   │
-│  │ Verification    │     │ (Booking)       │                   │
-│  └────────┬────────┘     └────────┬────────┘                   │
-│           │                       │                             │
-│           v                       v                             │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              Real-time Risk Evaluation                   │   │
-│  │                                                          │   │
-│  │  Signals:                                                │   │
-│  │  - Account age                                           │   │
-│  │  - Verification status                                   │   │
-│  │  - Payment method                                        │   │
-│  │  - Device fingerprint                                    │   │
-│  │  - Behavioral patterns                                   │   │
-│  │  - Message content (NLP)                                 │   │
-│  │                                                          │   │
-│  │  Actions:                                                │   │
-│  │  - Approve                                               │   │
-│  │  - Require verification                                  │   │
-│  │  - Manual review                                         │   │
-│  │  - Block                                                 │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-
-**WHY - Lý do & Impact:**
-- 50%+ reduction in fraud losses
-- Higher guest/host confidence
-- Critical for marketplace trust
-- Brand protection
-   - Account takeover
-   - Fake listings
-
-2. Content Moderation:
-   - Message screening
-   - Photo validation
-   - Review authenticity
-
-3. Host Quality:
-   - Response prediction
-   - Cancellation risk
-   - Superhost eligibility
+> **WHY - Lý do & Impact:**
+> 
+> 1. **Fraud Prevention:**
+>    - 50%+ reduction in fraud losses
+>    - Higher guest/host confidence
+>    - Critical for marketplace trust
+>    - Brand protection
+>    - Account takeover
+>    - Fake listings
+> 
+> 2. **Content Moderation:**
+>    - Message screening
+>    - Photo validation
+>    - Review authenticity
+> 
+> 3. **Host Quality:**
+>    - Response prediction
+>    - Cancellation risk
+>    - Superhost eligibility
 ```
 
 ### 4. Experimentation Platform (ERF)
 
 ```
-EXPERIMENTATION FRAMEWORK:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    ERF (Experiment Reporting Framework)          │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Experiment Setup                             │   │
-│  │  - Name: "New Search Ranking v2"                         │   │
-│  │  - Population: 10% of users                              │   │
-│  │  - Variants: Control, Treatment                          │   │
-│  │  - Primary metric: Booking conversion                    │   │
-│  │  - Guardrail metrics: Cancellation rate, CS tickets     │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Assignment Service                           │   │
-│  │  - Deterministic assignment (user_id hash)               │   │
-│  │  - Consistent across sessions                            │   │
-│  │  - Logging to Kafka                                      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Analysis Pipeline (Spark)                    │   │
-│  │  - Join assignments with outcomes                        │   │
-│  │  - Statistical tests                                     │   │
-│  │  - Segment analysis                                      │   │
-│  │  - Novelty effect detection                              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Dashboard (Superset)                         │   │
-│  │  - Treatment effect: +2.3% bookings                      │   │
-│  │  - Confidence: 95%                                       │   │
-│  │  - Sample size: adequate                                 │   │
-│  │  - Recommendation: SHIP IT                               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ERF [" "]
+        direction TB
+        E_TITLE["ERF (Experiment Reporting Framework)"]
+        style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SETUP["Experiment Setup<br>- Name: 'New Search Ranking v2'<br>- Population: 10% of users<br>- Variants: Control, Treatment<br>- Primary metric: Booking conversion<br>- Guardrail metrics: Cancellation rate, CS tickets"]
+        
+        ASSIGN["Assignment Service<br>- Deterministic assignment (user_id hash)<br>- Consistent across sessions<br>- Logging to Kafka"]
+        
+        ANAL["Analysis Pipeline (Spark)<br>- Join assignments with outcomes<br>- Statistical tests<br>- Segment analysis<br>- Novelty effect detection"]
+        
+        DASH["Dashboard (Superset)<br>- Treatment effect: +2.3% bookings<br>- Confidence: 95%<br>- Sample size: adequate<br>- Recommendation: SHIP IT"]
+        
+        SETUP --> ASSIGN
+        ASSIGN --> ANAL
+        ANAL --> DASH
+    end
+```
 ```
 
 ---
@@ -520,22 +401,22 @@ EXPERIMENTATION FRAMEWORK:
 ## 🛠️ AIRBNB OPEN SOURCE CONTRIBUTIONS
 
 ```
-AIRBNB OSS ECOSYSTEM:
-
-Data Engineering:
-├── Apache Airflow      - Workflow orchestration (Apache top-level)
-├── Apache Superset     - Data visualization (Apache top-level)
-├── Knowledge Repo      - Knowledge management
-└── Aerosolve          - ML library
-
-Frontend:
-├── Visx               - Visualization components
-├── React-dates        - Date picker
-└── Lottie             - Animation library
-
-Infrastructure:
-├── Nerve              - Service discovery
-└── Synapse            - Service registry
+> **AIRBNB OSS ECOSYSTEM:**
+> 
+> * **Data Engineering:**
+>   * Apache Airflow (Workflow orchestration - Apache top-level)
+>   * Apache Superset (Data visualization - Apache top-level)
+>   * Knowledge Repo (Knowledge management)
+>   * Aerosolve (ML library)
+> 
+> * **Frontend:**
+>   * Visx (Visualization components)
+>   * React-dates (Date picker)
+>   * Lottie (Animation library)
+> 
+> * **Infrastructure:**
+>   * Nerve (Service discovery)
+>   * Synapse (Service registry)
 ```
 
 ---

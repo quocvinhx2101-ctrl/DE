@@ -99,133 +99,169 @@ Apache Kafka là một **distributed event streaming platform** được thiết
 
 ### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Kafka Cluster                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    KRaft Controllers                            │ │
-│  │  (Metadata Management - replaces ZooKeeper)                    │ │
-│  │                                                                 │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │ │
-│  │  │ Controller  │  │ Controller  │  │ Controller  │             │ │
-│  │  │  (Leader)   │  │ (Follower)  │  │ (Follower)  │             │ │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘             │ │
-│  │                                                                 │ │
-│  │  Responsibilities:                                              │ │
-│  │  • Topic & partition metadata                                  │ │
-│  │  • Broker membership                                           │ │
-│  │  • Leader election                                             │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                      Kafka Brokers                              │ │
-│  │                                                                 │ │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │ │
-│  │  │   Broker 1      │  │   Broker 2      │  │   Broker 3      │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  Topic-A P0(L)  │  │  Topic-A P0(F)  │  │  Topic-A P1(L)  │ │ │
-│  │  │  Topic-A P1(F)  │  │  Topic-A P1(F)  │  │  Topic-A P0(F)  │ │ │
-│  │  │  Topic-B P0(L)  │  │  Topic-B P1(L)  │  │  Topic-B P2(L)  │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  L = Leader     │  │                 │  │                 │ │ │
-│  │  │  F = Follower   │  │                 │  │                 │ │ │
-│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘ │ │
-│  │                                                                 │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-        ▲                                               ▲
-        │                                               │
-   ┌────┴────┐                                    ┌─────┴─────┐
-   │Producers│                                    │ Consumers │
-   └─────────┘                                    └───────────┘
+```mermaid
+flowchart TD
+    subgraph K_CLUSTER [" "]
+        direction TB
+        K_TITLE["Kafka Cluster"]
+        style K_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph KRAFT [" "]
+            direction TB
+            KR_TITLE["KRaft Controllers<br>(Metadata Management - replaces ZooKeeper)"]
+            style KR_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            subgraph CONTR [" "]
+                direction LR
+                C1["Controller<br>(Leader)"]
+                C2["Controller<br>(Follower)"]
+                C3["Controller<br>(Follower)"]
+            end
+            
+            RESP["Responsibilities:<br>• Topic & partition metadata<br>• Broker membership<br>• Leader election"]
+            style RESP fill:none,stroke:none,text-align:left
+            
+            CONTR ~~~ RESP
+        end
+        
+        subgraph BROKERS [" "]
+            direction LR
+            B_TITLE["Kafka Brokers"]
+            style B_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+            
+            subgraph B1 [" "]
+                direction TB
+                BR1["Broker 1"]
+                style BR1 fill:none,stroke:none,font-weight:bold
+                T1_1["Topic-A P0(L)"]
+                T1_2["Topic-A P1(F)"]
+                T1_3["Topic-B P0(L)"]
+                BR1 ~~~ T1_1 ~~~ T1_2 ~~~ T1_3
+            end
+            subgraph B2 [" "]
+                direction TB
+                BR2["Broker 2"]
+                style BR2 fill:none,stroke:none,font-weight:bold
+                T2_1["Topic-A P0(F)"]
+                T2_2["Topic-A P1(F)"]
+                T2_3["Topic-B P1(L)"]
+                BR2 ~~~ T2_1 ~~~ T2_2 ~~~ T2_3
+            end
+            subgraph B3 [" "]
+                direction TB
+                BR3["Broker 3"]
+                style BR3 fill:none,stroke:none,font-weight:bold
+                T3_1["Topic-A P1(L)"]
+                T3_2["Topic-A P0(F)"]
+                T3_3["Topic-B P2(L)"]
+                BR3 ~~~ T3_1 ~~~ T3_2 ~~~ T3_3
+            end
+        end
+        
+        KRAFT ~~~ BROKERS
+        
+        LEG["L = Leader<br>F = Follower"]
+        style LEG fill:none,stroke:none,text-align:left
+        BROKERS ~~~ LEG
+    end
+    
+    PROD["Producers"]
+    CONS["Consumers"]
+    
+    PROD --> K_CLUSTER
+    K_CLUSTER --> CONS
 ```
 
 ### Topic & Partition Structure
 
-```
-Topic: orders (3 partitions, replication factor = 3)
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Partition 0:                                                        │
-│  ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐                  │
-│  │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10 │11 │ ──► Append only │
-│  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘                  │
-│                                        ▲                             │
-│                                    Offset                            │
-│                                                                      │
-│  Partition 1:                                                        │
-│  ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐                          │
-│  │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │ ──► Append only          │
-│  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘                          │
-│                                                                      │
-│  Partition 2:                                                        │
-│  ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐          │
-│  │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │10 │11 │12 │13 │ ──►      │
-│  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          │
-│                                                                      │
-│  Each message has:                                                   │
-│  • Offset - unique within partition                                 │
-│  • Key - for partitioning                                           │
-│  • Value - actual data                                              │
-│  • Timestamp - event time or ingestion time                         │
-│  • Headers - metadata                                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph TOPIC [" "]
+        direction TB
+        T_TITLE["Topic: orders (3 partitions, replication factor = 3)"]
+        style T_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        P0["Partition 0:<br>| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |10 |11 | ──► Append only<br>           ▲ Offset"]
+        P1["Partition 1:<br>| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | ──► Append only"]
+        P2["Partition 2:<br>| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |10 |11 |12 |13 | ──►"]
+        
+        T_TITLE ~~~ P0 ~~~ P1 ~~~ P2
+        
+        META["Each message has:<br>• Offset - unique within partition<br>• Key - for partitioning<br>• Value - actual data<br>• Timestamp - event time or ingestion time<br>• Headers - metadata"]
+        style META fill:none,stroke:none,text-align:left
+        
+        P2 ~~~ META
+    end
 ```
 
 ### Replication
 
-```
-Topic Partition Replication (RF=3):
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Partition 0 distributed across 3 brokers:                          │
-│                                                                      │
-│  Broker 1              Broker 2              Broker 3               │
-│  ┌─────────────┐       ┌─────────────┐       ┌─────────────┐        │
-│  │  Partition 0│       │  Partition 0│       │  Partition 0│        │
-│  │   (Leader)  │──────►│  (Follower) │       │  (Follower) │        │
-│  │             │       │             │◄──────│             │        │
-│  │  [0,1,2,3]  │       │  [0,1,2,3]  │       │  [0,1,2,3]  │        │
-│  └─────────────┘       └─────────────┘       └─────────────┘        │
-│        │                                                             │
-│        ▼                                                             │
-│  Producer writes ──► Leader only                                     │
-│  Consumer reads ──► Leader (or any ISR replica with rack-awareness) │
-│                                                                      │
-│  ISR (In-Sync Replicas): Replicas caught up with leader            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph REP [" "]
+        direction TB
+        R_TITLE["Topic Partition Replication (RF=3)<br>Partition 0 distributed across 3 brokers"]
+        style R_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph BROKERS [" "]
+            direction LR
+            B1["Broker 1<br>Partition 0<br>(Leader)<br>[0,1,2,3]"]
+            B2["Broker 2<br>Partition 0<br>(Follower)<br>[0,1,2,3]"]
+            B3["Broker 3<br>Partition 0<br>(Follower)<br>[0,1,2,3]"]
+            
+            B1 --> B2
+            B1 --> B3
+        end
+        
+        R_TITLE ~~~ BROKERS
+        
+        PROD["Producer writes ──► Leader only"]
+        CONS["Consumer reads ──► Leader (or any ISR replica with rack-awareness)"]
+        ISR["ISR (In-Sync Replicas): Replicas caught up with leader"]
+        
+        style PROD fill:none,stroke:none,text-align:left
+        style CONS fill:none,stroke:none,text-align:left
+        style ISR fill:none,stroke:none,text-align:left
+        
+        BROKERS ~~~ PROD ~~~ CONS ~~~ ISR
+    end
 ```
 
 ### Consumer Groups
 
-```
-Consumer Group: analytics-group
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Topic: events (6 partitions)                                        │
-│                                                                      │
-│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐              │
-│  │  P0  │ │  P1  │ │  P2  │ │  P3  │ │  P4  │ │  P5  │              │
-│  └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘              │
-│     │        │        │        │        │        │                   │
-│     └────────┼────────┘        │        └────────┼───────┘           │
-│              │                 │                 │                   │
-│              ▼                 ▼                 ▼                   │
-│        ┌──────────┐      ┌──────────┐      ┌──────────┐             │
-│        │Consumer 1│      │Consumer 2│      │Consumer 3│             │
-│        │ P0, P1   │      │ P2, P3   │      │ P4, P5   │             │
-│        └──────────┘      └──────────┘      └──────────┘             │
-│                                                                      │
-│  Each partition ──► exactly one consumer in group                    │
-│  Add consumers ──► automatic rebalancing                            │
-│  Max consumers = number of partitions                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CG [" "]
+        direction TB
+        C_TITLE["Consumer Group: analytics-group<br>Topic: events (6 partitions)"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph PARTS [" "]
+            direction LR
+            P0["P0"]
+            P1["P1"]
+            P2["P2"]
+            P3["P3"]
+            P4["P4"]
+            P5["P5"]
+        end
+        
+        subgraph CONS [" "]
+            direction LR
+            C1["Consumer 1<br>(P0, P1)"]
+            C2["Consumer 2<br>(P2, P3)"]
+            C3["Consumer 3<br>(P4, P5)"]
+        end
+        
+        P0 & P1 --> C1
+        P2 & P3 --> C2
+        P4 & P5 --> C3
+        
+        RULES["Each partition ──► exactly one consumer in group<br>Add consumers ──► automatic rebalancing<br>Max consumers = number of partitions"]
+        style RULES fill:none,stroke:none,text-align:left
+        
+        C_TITLE ~~~ PARTS ~~~ CONS ~~~ RULES
+    end
 ```
 
 ---
@@ -234,59 +270,59 @@ Consumer Group: analytics-group
 
 ### 1. Message Format
 
-```
-Kafka Message Structure:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Record Batch                            │    │
-│  │  ┌───────────────────────────────────────────────────────┐  │    │
-│  │  │ Base Offset: 1000                                     │  │    │
-│  │  │ Partition Leader Epoch: 5                             │  │    │
-│  │  │ Magic: 2                                              │  │    │
-│  │  │ CRC: checksum                                         │  │    │
-│  │  │ Compression: snappy                                   │  │    │
-│  │  │ Timestamp Type: CreateTime                            │  │    │
-│  │  │ First Timestamp: 1704067200000                        │  │    │
-│  │  └───────────────────────────────────────────────────────┘  │    │
-│  │                                                              │    │
-│  │  Records:                                                    │    │
-│  │  ┌─────────────────────────────────────────────────────┐    │    │
-│  │  │ Record 0:                                           │    │    │
-│  │  │   Offset: 1000                                      │    │    │
-│  │  │   Timestamp: 1704067200000                          │    │    │
-│  │  │   Key: "user-123"                                   │    │    │
-│  │  │   Value: {"event": "click", "page": "/home"}        │    │    │
-│  │  │   Headers: [("source", "web"), ("version", "1")]    │    │    │
-│  │  └─────────────────────────────────────────────────────┘    │    │
-│  │  ┌─────────────────────────────────────────────────────┐    │    │
-│  │  │ Record 1:                                           │    │    │
-│  │  │   Offset: 1001                                      │    │    │
-│  │  │   ...                                               │    │    │
-│  │  └─────────────────────────────────────────────────────┘    │    │
-│  └──────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```yaml
+Record_Batch:
+  Base_Offset: 1000
+  Partition_Leader_Epoch: 5
+  Magic: 2
+  CRC: "checksum"
+  Compression: "snappy"
+  Timestamp_Type: "CreateTime"
+  First_Timestamp: 1704067200000
+  Records:
+    - Offset: 1000
+      Timestamp: 1704067200000
+      Key: "user-123"
+      Value: {"event": "click", "page": "/home"}
+      Headers: 
+        - ("source", "web")
+        - ("version", "1")
+    - Offset: 1001
+      # ...
 ```
 
 ### 2. Producer Acknowledgments
 
-```
-acks=0 (Fire and forget):
-Producer ──► Broker
-    │
-    └──► No wait, highest throughput, possible data loss
-
-acks=1 (Leader acknowledgment):
-Producer ──► Leader ──► Response
-                 │
-                 └──► Leader wrote, followers may not have
-
-acks=all (Full acknowledgment):
-Producer ──► Leader ──► Followers ──► Response
-                             │
-                             └──► All ISR replicas wrote
-                                  Strongest durability
+```mermaid
+flowchart TD
+    subgraph ACKS [" "]
+        direction TB
+        
+        subgraph A0 ["acks=0 (Fire and forget)"]
+            direction LR
+            P0["Producer"] --> B0["Broker"]
+            R0["No wait, highest throughput, possible data loss"]
+            style R0 fill:none,stroke:none
+            B0 ~~~ R0
+        end
+        
+        subgraph A1 ["acks=1 (Leader acknowledgment)"]
+            direction LR
+            P1["Producer"] --> L1["Leader"] --> RES1["Response"]
+            R1["Leader wrote, followers may not have"]
+            style R1 fill:none,stroke:none
+            L1 ~~~ R1
+        end
+        
+        subgraph AALL ["acks=all (Full acknowledgment)"]
+            direction LR
+            P2["Producer"] --> L2["Leader"] --> F2["Followers"] --> RES2["Response"]
+            R2["All ISR replicas wrote<br>Strongest durability"]
+            style R2 fill:none,stroke:none
+            F2 ~~~ R2
+        end
+        
+    end
 ```
 
 ### 3. Delivery Semantics
@@ -316,59 +352,43 @@ props.put("transactional.id", "my-transactional-id");
 
 ### 4. Offset Management
 
-```
-Consumer Offset Tracking:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  __consumer_offsets topic (internal):                               │
-│                                                                      │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │ Key: (group-id, topic, partition)                             │  │
-│  │ Value: committed offset                                       │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  Partition 0: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, ...]                   │
-│                         ▲           ▲       ▲                       │
-│                         │           │       │                       │
-│                    Committed    Current   High                      │
-│                     Offset      Position  Watermark                 │
-│                       (5)         (7)      (10)                     │
-│                                                                      │
-│  Commit strategies:                                                  │
-│  • Auto commit (enable.auto.commit=true)                            │
-│  • Manual sync commit (commitSync())                                │
-│  • Manual async commit (commitAsync())                              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph OFF [" "]
+        direction TB
+        O_TITLE["Consumer Offset Tracking"]
+        style O_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        TOPIC["__consumer_offsets topic (internal):<br>Key: (group-id, topic, partition)<br>Value: committed offset"]
+        
+        PART["Partition 0: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, ...]<br>Committed Offset (5)<br>Current Position (7)<br>High Watermark (10)"]
+        
+        STRAT["Commit strategies:<br>• Auto commit (enable.auto.commit=true)<br>• Manual sync commit (commitSync())<br>• Manual async commit (commitAsync())"]
+        style STRAT fill:none,stroke:none,text-align:left
+        
+        TOPIC ~~~ PART ~~~ STRAT
+    end
 ```
 
 ### 5. Tiered Storage (Kafka 3.6+)
 
-```
-Tiered Storage Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Hot Data (Local Tier):                                             │
-│  ┌─────────────────────────────────────────────────────────┐        │
-│  │  Broker Local Disk                                       │        │
-│  │  Recent segments, frequently accessed                    │        │
-│  │  [Segment 100] [Segment 101] [Segment 102]              │        │
-│  └─────────────────────────────────────────────────────────┘        │
-│                         │                                            │
-│                         │ Offload older segments                    │
-│                         ▼                                            │
-│  Cold Data (Remote Tier):                                           │
-│  ┌─────────────────────────────────────────────────────────┐        │
-│  │  Object Storage (S3/GCS/Azure Blob)                      │        │
-│  │  [Segment 1] [Segment 2] ... [Segment 99]               │        │
-│  │                                                          │        │
-│  │  Benefits:                                               │        │
-│  │  • Infinite retention                                    │        │
-│  │  • Lower cost storage                                    │        │
-│  │  • Smaller broker disk                                   │        │
-│  └─────────────────────────────────────────────────────────┘        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph TIER [" "]
+        direction TB
+        T_TITLE["Tiered Storage Architecture"]
+        style T_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        HOT["Hot Data (Local Tier):<br>Broker Local Disk<br>Recent segments, frequently accessed<br>[Segment 100] [Segment 101] [Segment 102]"]
+        
+        COLD["Cold Data (Remote Tier):<br>Object Storage (S3/GCS/Azure Blob)<br>[Segment 1] [Segment 2] ... [Segment 99]"]
+        
+        BEN["Benefits:<br>• Infinite retention<br>• Lower cost storage<br>• Smaller broker disk"]
+        style BEN fill:none,stroke:none,text-align:left
+        
+        HOT -->|Offload older segments| COLD
+        COLD ~~~ BEN
+    end
 ```
 
 ---
@@ -377,36 +397,29 @@ Tiered Storage Architecture:
 
 ### Architecture
 
-```
-Kafka Connect Cluster:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      │
-│  │ Connect Worker 1│  │ Connect Worker 2│  │ Connect Worker 3│      │
-│  │                 │  │                 │  │                 │      │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │      │
-│  │  │  Task 1   │  │  │  │  Task 3   │  │  │  │  Task 5   │  │      │
-│  │  │ (MySQL)   │  │  │  │ (S3)      │  │  │  │ (JDBC)    │  │      │
-│  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │      │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │      │
-│  │  │  Task 2   │  │  │  │  Task 4   │  │  │  │  Task 6   │  │      │
-│  │  │ (MySQL)   │  │  │  │ (Elastic) │  │  │  │ (JDBC)    │  │      │
-│  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │      │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘      │
-│                                │                                     │
-│                                ▼                                     │
-│                    Distributed coordination via                     │
-│                    Kafka internal topics                            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                    │                        │
-                    ▼                        ▼
-            ┌─────────────┐          ┌─────────────┐
-            │   Sources   │          │    Sinks    │
-            │  - MySQL    │          │  - S3       │
-            │  - Postgres │          │  - Elastic  │
-            │  - MongoDB  │          │  - BigQuery │
-            └─────────────┘          └─────────────┘
+```mermaid
+flowchart TD
+    subgraph CONN [" "]
+        direction TB
+        C_TITLE["Kafka Connect Cluster"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph WORKERS [" "]
+            direction LR
+            W1["Connect Worker 1<br>Task 1 (MySQL)<br>Task 2 (MySQL)"]
+            W2["Connect Worker 2<br>Task 3 (S3)<br>Task 4 (Elastic)"]
+            W3["Connect Worker 3<br>Task 5 (JDBC)<br>Task 6 (JDBC)"]
+        end
+        
+        COORD["Distributed coordination via<br>Kafka internal topics"]
+        
+        WORKERS --> COORD
+    end
+    
+    SRC["Sources<br>- MySQL<br>- Postgres<br>- MongoDB"]
+    SINK["Sinks<br>- S3<br>- Elastic<br>- BigQuery"]
+    
+    CONN --> SRC & SINK
 ```
 
 ### Source Connector Example (Debezium CDC)
@@ -467,31 +480,31 @@ Kafka Connect Cluster:
 
 Kafka Streams là một **lightweight stream processing library** chạy như application thường, không cần cluster riêng.
 
-```
-Kafka Streams Application:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Your Application (JVM)                    │    │
-│  │                                                              │    │
-│  │  ┌──────────────────────────────────────────────────────┐   │    │
-│  │  │                  Kafka Streams                        │   │    │
-│  │  │                                                       │   │    │
-│  │  │  Stream Processor ──► Processor ──► Processor        │   │    │
-│  │  │       │                    │             │           │   │    │
-│  │  │       ▼                    ▼             ▼           │   │    │
-│  │  │  [State Store]       [State Store]   [Sink Topic]   │   │    │
-│  │  │   (RocksDB)           (RocksDB)                     │   │    │
-│  │  │                                                       │   │    │
-│  │  └──────────────────────────────────────────────────────┘   │    │
-│  │                                                              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              │                                       │
-│                              ▼                                       │
-│              Scales by running multiple instances                   │
-│              Each instance handles subset of partitions             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP [" "]
+        direction TB
+        A_TITLE["Kafka Streams Application<br>Your Application (JVM)"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph STREAMS [" "]
+            direction LR
+            SP1["Stream Processor"] --> SP2["Processor"] --> SP3["Processor"]
+            
+            SS1["State Store<br>(RocksDB)"]
+            SS2["State Store<br>(RocksDB)"]
+            SINK["Sink Topic"]
+            
+            SP1 --> SS1
+            SP2 --> SS2
+            SP3 --> SINK
+        end
+    end
+    
+    SCALE["Scales by running multiple instances<br>Each instance handles subset of partitions"]
+    style SCALE fill:none,stroke:none,text-align:left
+    
+    APP --> SCALE
 ```
 
 ### DSL API
@@ -722,91 +735,91 @@ table_env.execute_sql("""
 
 ### 1. Event-Driven Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Event-Driven Microservices                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Order Service ─────► [orders] ─────► Inventory Service             │
-│       │                   │                    │                    │
-│       │                   │                    │                    │
-│       │                   ▼                    ▼                    │
-│       │            [order-events]        [inventory-events]         │
-│       │                   │                    │                    │
-│       │                   │                    │                    │
-│       │                   ▼                    ▼                    │
-│       │            Notification        Analytics Service            │
-│       │              Service                                        │
-│       │                   │                                         │
-│       │                   ▼                                         │
-│       └──────────► [email-events] ───► Email Service                │
-│                                                                      │
-│  Benefits:                                                           │
-│  • Loose coupling                                                   │
-│  • Async communication                                              │
-│  • Replay capability                                                │
-│  • Event sourcing                                                   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph EDA [" "]
+        direction TB
+        E_TITLE["Event-Driven Microservices"]
+        style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        OS["Order Service"] -->|orders| IS["Inventory Service"]
+        
+        OS --> ORD_E["[order-events]"] --> NS["Notification Service"]
+        IS --> INV_E["[inventory-events]"] --> AS["Analytics Service"]
+        
+        NS --> EM_E["[email-events]"] --> ES["Email Service"]
+        
+        BEN["Benefits:<br>• Loose coupling<br>• Async communication<br>• Replay capability<br>• Event sourcing"]
+        style BEN fill:none,stroke:none,text-align:left
+        
+        NS ~~~ BEN
+    end
 ```
 
 ### 2. Real-time Data Pipeline
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Modern Data Stack with Kafka                      │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐                                                    │
-│  │ Databases   │──┐                                                 │
-│  │ (CDC)       │  │                                                 │
-│  └─────────────┘  │      ┌─────────────────────┐                   │
-│                   │      │                     │                   │
-│  ┌─────────────┐  ├─────►│   Apache Kafka      │                   │
-│  │ Applications│──┤      │                     │                   │
-│  │ (events)    │  │      │  Central Event Hub  │                   │
-│  └─────────────┘  │      │                     │                   │
-│                   │      └──────────┬──────────┘                   │
-│  ┌─────────────┐  │                 │                              │
-│  │ IoT Devices │──┘                 │                              │
-│  │ (telemetry) │                    │                              │
-│  └─────────────┘                    │                              │
-│                                     │                              │
-│            ┌────────────────────────┼────────────────────┐         │
-│            │                        │                    │         │
-│            ▼                        ▼                    ▼         │
-│     ┌─────────────┐          ┌─────────────┐     ┌─────────────┐  │
-│     │    Flink    │          │   Connect   │     │  ksqlDB     │  │
-│     │ (streaming) │          │  (to Lake)  │     │ (analytics) │  │
-│     └─────────────┘          └─────────────┘     └─────────────┘  │
-│            │                        │                    │         │
-│            ▼                        ▼                    ▼         │
-│     ┌─────────────┐          ┌─────────────┐     ┌─────────────┐  │
-│     │  Real-time  │          │   Iceberg   │     │  Dashboard  │  │
-│     │   Actions   │          │ Data Lake   │     │             │  │
-│     └─────────────┘          └─────────────┘     └─────────────┘  │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MDS [" "]
+        direction TB
+        M_TITLE["Modern Data Stack with Kafka"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        DB["Databases<br>(CDC)"]
+        APP["Applications<br>(events)"]
+        IOT["IoT Devices<br>(telemetry)"]
+        
+        subgraph KAFKA ["Apache Kafka<br>Central Event Hub"]
+            direction TB
+        end
+        
+        DB & APP & IOT --> KAFKA
+        
+        FLINK["Flink<br>(streaming)"]
+        CONN["Connect<br>(to Lake)"]
+        KSQL["ksqlDB<br>(analytics)"]
+        
+        KAFKA --> FLINK & CONN & KSQL
+        
+        ACT["Real-time<br>Actions"]
+        ICE["Iceberg<br>Data Lake"]
+        DASH["Dashboard"]
+        
+        FLINK --> ACT
+        CONN --> ICE
+        KSQL --> DASH
+    end
 ```
 
 ### 3. Log Aggregation
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Centralized Log Pipeline                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Server 1 ──► Filebeat ──┐                                          │
-│  Server 2 ──► Filebeat ──┼──► Kafka (logs) ──┬──► Elasticsearch     │
-│  Server 3 ──► Filebeat ──┤                   │                      │
-│  Container ─► Fluentd ───┘                   ├──► S3 (archive)      │
-│                                              │                      │
-│                                              └──► Flink (alerting)  │
-│                                                                      │
-│  Daily Volume: 100TB+                                               │
-│  Retention: Kafka 7 days, S3 forever                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph LOGS [" "]
+        direction LR
+        L_TITLE["Centralized Log Pipeline"]
+        style L_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        S1["Server 1"] --> F1["Filebeat"]
+        S2["Server 2"] --> F2["Filebeat"]
+        S3["Server 3"] --> F3["Filebeat"]
+        C1["Container"] --> FL["Fluentd"]
+        
+        KAFKA["Kafka (logs)"]
+        F1 & F2 & F3 & FL --> KAFKA
+        
+        EL["Elasticsearch"]
+        S3A["S3 (archive)"]
+        FLINK["Flink (alerting)"]
+        
+        KAFKA --> EL & S3A & FLINK
+        
+        META["Daily Volume: 100TB+<br>Retention: Kafka 7 days, S3 forever"]
+        style META fill:none,stroke:none,text-align:left
+        
+        FLINK ~~~ META
+        L_TITLE ~~~ S1
+    end
 ```
 
 ---

@@ -93,109 +93,86 @@ Apache Flink là một **distributed stream processing framework** và **batch p
 
 ### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Flink Cluster                                │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                      Job Manager                                │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │ │
-│  │  │  Dispatcher  │  │ResourceMgr  │  │  JobMaster   │          │ │
-│  │  │  (REST API)  │  │(allocations)│  │ (per job)    │          │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘          │ │
-│  │                                                                 │ │
-│  │  Responsibilities:                                              │ │
-│  │  • Coordinate distributed execution                            │ │
-│  │  • Schedule tasks to Task Managers                             │ │
-│  │  • Coordinate checkpoints                                      │ │
-│  │  • Handle recovery                                             │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    Task Managers (Workers)                      │ │
-│  │                                                                 │ │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │ │
-│  │  │  Task Manager 1 │  │  Task Manager 2 │  │  Task Manager N │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │ │ │
-│  │  │  │  Task 1   │  │  │  │  Task 3   │  │  │  │  Task 5   │  │ │ │
-│  │  │  │ (Slot 1)  │  │  │  │ (Slot 1)  │  │  │  │ (Slot 1)  │  │ │ │
-│  │  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │ │ │
-│  │  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │ │ │
-│  │  │  │  Task 2   │  │  │  │  Task 4   │  │  │  │  Task 6   │  │ │ │
-│  │  │  │ (Slot 2)  │  │  │  │ (Slot 2)  │  │  │  │ (Slot 2)  │  │ │ │
-│  │  │  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │ │ │
-│  │  │                 │  │                 │  │                 │ │ │
-│  │  │  [State Store] │  │  [State Store] │  │  [State Store] │ │ │
-│  │  │  (RocksDB)     │  │  (RocksDB)     │  │  (RocksDB)     │ │ │
-│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘ │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Checkpoint Storage                                │
-│                 (S3 / HDFS / GCS / Azure Blob)                       │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph FLINK ["Flink Cluster"]
+        direction TB
+        
+        subgraph JM ["Job Manager"]
+            direction LR
+            DISP["Dispatcher<br>(REST API)"]
+            RM["ResourceMgr<br>(Allocations)"]
+            JMASTER["JobMaster<br>(Per Job)"]
+            
+            DISP ~~~ RM ~~~ JMASTER
+        end
+        
+        subgraph TM ["Task Managers (Workers)"]
+            direction LR
+            TM1["Task Manager 1<br>[State: RocksDB]<br>Task 1 (Slot 1)<br>Task 2 (Slot 2)"]
+            TM2["Task Manager 2<br>[State: RocksDB]<br>Task 3 (Slot 1)<br>Task 4 (Slot 2)"]
+            TM_N["Task Manager N<br>[State: RocksDB]<br>Task 5 (Slot 1)<br>Task 6 (Slot 2)"]
+            
+            TM1 ~~~ TM2 ~~~ TM_N
+        end
+        
+        JM -->|"Schedules Tasks"| TM
+    end
+
+    CHK["Checkpoint Storage<br>(S3 / HDFS / GCS / Azure Blob)"]
+
+    TM -->|"State Snapshots"| CHK
+
+    style FLINK fill:#e3f2fd,stroke:#1565c0
+    style JM fill:#fff9c4,stroke:#fbc02d
+    style TM fill:#c8e6c9,stroke:#4caf50
 ```
 
 ### Job Execution Flow
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Job Submission Flow                             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│   User Code                                                          │
-│      │                                                               │
-│      ▼                                                               │
-│   ┌──────────────┐                                                   │
-│   │  StreamGraph │  ─► Logical representation of program             │
-│   │  (logical)   │     Operators and their connections               │
-│   └──────┬───────┘                                                   │
-│          │                                                           │
-│          ▼                                                           │
-│   ┌──────────────┐                                                   │
-│   │   JobGraph   │  ─► Optimized with operator chaining              │
-│   │  (optimized) │     Operator chains = tasks                       │
-│   └──────┬───────┘                                                   │
-│          │                                                           │
-│          ▼                                                           │
-│   ┌──────────────────┐                                               │
-│   │ ExecutionGraph   │  ─► Parallelism applied                       │
-│   │   (parallel)     │     Tasks split into subtasks                 │
-│   └──────────────────┘                                               │
-│          │                                                           │
-│          ▼                                                           │
-│   Deployed to Task Managers                                          │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SUBMIT ["Job Submission Flow"]
+        direction TB
+        CODE["User Code"]
+        SG["StreamGraph (logical)<br>Operators and connections"]
+        JG["JobGraph (optimized)<br>Operator chains = tasks"]
+        EG["ExecutionGraph (parallel)<br>Tasks split into subtasks"]
+        DEPLOY["Deployed to Task Managers"]
+
+        CODE -->|"Compiles to"| SG
+        SG -->|"Optimizes"| JG
+        JG -->|"Parallelizes"| EG
+        EG --> DEPLOY
+    end
+    
+    style SUBMIT fill:#f3e5f5,stroke:#ab47bc
 ```
 
 ### Operator Chaining
 
+```mermaid
+flowchart LR
+    subgraph BEFORE ["Before Chaining (4 Tasks)"]
+        direction LR
+        S1["Source"] --> F1["Filter"] --> M1["Map"] --> SNK1["Sink"]
+    end
+
+    subgraph AFTER ["After Chaining (2 Tasks)"]
+        direction LR
+        CHAIN["Source ──► Filter ──► Map<br>(Chained Operators)"] --> SNK2["Sink"]
+    end
+    
+    BEFORE ~~~ AFTER
+
+    style BEFORE fill:#ffebee
+    style AFTER fill:#e8f5e9
 ```
-Before Chaining:
-┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
-│ Source │──►│ Filter │──►│  Map   │──►│  Sink  │
-└────────┘   └────────┘   └────────┘   └────────┘
-  Task 1       Task 2       Task 3       Task 4
 
-After Chaining:
-┌──────────────────────────────────────┐   ┌────────┐
-│  Source ──► Filter ──► Map           │──►│  Sink  │
-│          (chained operators)          │   └────────┘
-└──────────────────────────────────────┘
-              Task 1                        Task 2
-
-Benefits:
+**Benefits of Chaining:**
 ✅ Reduced serialization overhead
 ✅ Lower latency
 ✅ Better resource utilization
-```
 
 ---
 
@@ -281,29 +258,24 @@ WatermarkStrategy
 
 Flink's mechanism for fault tolerance:
 
-```
-Checkpoint Process:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  1. JobManager triggers checkpoint                              │
-│     │                                                            │
-│     ▼                                                            │
-│  2. Checkpoint barriers injected into data stream              │
-│     ────[data]────[barrier]────[data]────►                      │
-│     │                                                            │
-│     ▼                                                            │
-│  3. Operators snapshot state when barrier arrives               │
-│     State → State Backend → Checkpoint Storage                  │
-│     │                                                            │
-│     ▼                                                            │
-│  4. All operators acknowledge → Checkpoint complete             │
-│                                                                  │
-│  Recovery:                                                       │
-│  • Restart from last successful checkpoint                      │
-│  • Restore state                                                │
-│  • Replay from checkpoint position in source                    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CHK [" "]
+        direction TB
+        C_TITLE["Checkpoint Process"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        S1["1. JobManager triggers checkpoint"]
+        S2["2. Checkpoint barriers injected into data stream<br>────[data]────[barrier]────[data]────►"]
+        S3["3. Operators snapshot state when barrier arrives<br>State → State Backend → Checkpoint Storage"]
+        S4["4. All operators acknowledge → Checkpoint complete"]
+        
+        S1 --> S2 --> S3 --> S4
+    end
+    
+    REC["Recovery:<br>• Restart from last successful checkpoint<br>• Restore state<br>• Replay from checkpoint position in source"]
+    style REC fill:none,stroke:none,text-align:left
+    CHK ~~~ REC
 ```
 
 **Checkpoint Configuration:**
@@ -324,27 +296,21 @@ env.getCheckpointConfig().setExternalizedCheckpointCleanup(
 
 ### API Layers
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         High-Level                               │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                    Table API / SQL                          │ │
-│  │         Declarative, SQL-like, unified batch/stream         │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                    DataStream API                           │ │
-│  │       Functional transformations on data streams            │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                   ProcessFunction API                       │ │
-│  │         Low-level: timers, state, side outputs              │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                          Low-Level                               │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph API [" "]
+        direction TB
+        A_TITLE["High-Level"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SQL["Table API / SQL<br>Declarative, SQL-like, unified batch/stream"]
+        DS["DataStream API<br>Functional transformations on data streams"]
+        PF["ProcessFunction API<br>Low-level: timers, state, side outputs"]
+        LOW["Low-Level"]
+        style LOW fill:none,stroke:none,font-weight:bold,color:#333
+        
+        A_TITLE ~~~ SQL --> DS --> PF ~~~ LOW
+    end
 ```
 
 ### DataStream API
@@ -410,30 +376,20 @@ GROUP BY
 
 **Keyed State** (per key)
 
-```
-KeyedState Types:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  ValueState<T>      - Single value per key                      │
-│  ListState<T>       - List of values per key                    │
-│  MapState<K,V>      - Map of key-values per key                 │
-│  ReducingState<T>   - Aggregated value per key                  │
-│  AggregatingState   - Custom aggregation per key                │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **KeyedState Types**
+> 
+> * `ValueState<T>` - Single value per key
+> * `ListState<T>` - List of values per key
+> * `MapState<K,V>` - Map of key-values per key
+> * `ReducingState<T>` - Aggregated value per key
+> * `AggregatingState` - Custom aggregation per key
 
 **Operator State** (per operator instance)
 
-```
-OperatorState Types:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  ListState<T>                 - Union redistribution            │
-│  BroadcastState<K,V>          - Broadcast patterns              │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **OperatorState Types**
+> 
+> * `ListState<T>` - Union redistribution
+> * `BroadcastState<K,V>` - Broadcast patterns
 
 ### State Backends
 
@@ -511,39 +467,20 @@ public class StatefulFunction extends KeyedProcessFunction<String, Event, Result
 
 ### Window Types
 
-```
-1. Tumbling Windows (non-overlapping, fixed size)
-┌──────────┐┌──────────┐┌──────────┐┌──────────┐
-│ Window 1 ││ Window 2 ││ Window 3 ││ Window 4 │
-│  0-5min  ││  5-10min ││ 10-15min ││ 15-20min │
-└──────────┘└──────────┘└──────────┘└──────────┘
-───────────────────────────────────────────────────►
-
-2. Sliding Windows (overlapping)
-┌──────────────────┐
-│     Window 1     │  (0-10min)
-└──────────────────┘
-      ┌──────────────────┐
-      │     Window 2     │  (5-15min)
-      └──────────────────┘
-            ┌──────────────────┐
-            │     Window 3     │  (10-20min)
-            └──────────────────┘
-───────────────────────────────────────────────────►
-
-3. Session Windows (activity-based gaps)
-┌─────────┐          ┌──────────────┐       ┌───┐
-│Session 1│          │   Session 2  │       │S3 │
-└─────────┘          └──────────────┘       └───┘
-   │ gap │              │   gap   │
-───────────────────────────────────────────────────►
-
-4. Global Windows (all elements in one window)
-┌─────────────────────────────────────────────────┐
-│                  Global Window                   │
-│              (with custom trigger)               │
-└─────────────────────────────────────────────────┘
-───────────────────────────────────────────────────►
+```mermaid
+flowchart TD
+    subgraph WIN [" "]
+        direction TB
+        W_TITLE["Window Types"]
+        style W_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        W1["1. Tumbling Windows (non-overlapping, fixed size)<br>Window 1 (0-5min) | Window 2 (5-10min) | Window 3 (10-15min) | Window 4 (15-20min)"]
+        W2["2. Sliding Windows (overlapping)<br>Window 1 (0-10min)<br>      Window 2 (5-15min)<br>            Window 3 (10-20min)"]
+        W3["3. Session Windows (activity-based gaps)<br>Session 1  gap  Session 2  gap  S3"]
+        W4["4. Global Windows (all elements in one window)<br>(with custom trigger)"]
+        
+        W_TITLE ~~~ W1 ~~~ W2 ~~~ W3 ~~~ W4
+    end
 ```
 
 ### Window Operations
@@ -831,71 +768,58 @@ SELECT * FROM mysql_orders;
 
 ### 1. Alibaba - Double 11 (Singles Day)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Alibaba Double 11 Architecture                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   Scale:                                                         │
-│   • 583,000 orders per second peak                              │
-│   • 10,000+ Flink jobs                                          │
-│   • Petabytes of data processed                                 │
-│                                                                  │
-│   Use Cases:                                                     │
-│   • Real-time GMV dashboard                                     │
-│   • Fraud detection                                             │
-│   • Recommendation updates                                      │
-│   • Inventory management                                        │
-│                                                                  │
-│   Architecture:                                                  │
-│   Mobile Apps ──► API Gateway ──► Kafka ──► Flink               │
-│                                              │                   │
-│                            ┌─────────────────┼─────────────────┐ │
-│                            ▼                 ▼                 ▼ │
-│                     Real-time          Analytics          ML     │
-│                     Dashboard          (Hudi/Iceberg)    Models  │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ALI [" "]
+        direction TB
+        A_TITLE["Alibaba Double 11 Architecture"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SCALE["Scale:<br>• 583,000 orders per second peak<br>• 10,000+ Flink jobs<br>• Petabytes of data processed"]
+        USE["Use Cases:<br>• Real-time GMV dashboard<br>• Fraud detection<br>• Recommendation updates<br>• Inventory management"]
+        
+        style SCALE fill:none,stroke:none,text-align:left
+        style USE fill:none,stroke:none,text-align:left
+        
+        A_TITLE ~~~ SCALE ~~~ USE
+        
+        SRC["Mobile Apps"] --> API["API Gateway"] --> KAFKA["Kafka"] --> FLINK["Flink"]
+        
+        subgraph OUT [" "]
+            direction LR
+            DASH["Real-time Dashboard"]
+            ANAL["Analytics (Hudi/Iceberg)"]
+            ML["ML Models"]
+        end
+        FLINK --> OUT
+        USE ~~~ SRC
+    end
 ```
 
 ### 2. Fraud Detection Pipeline
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Fraud Detection Pipeline                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   Transactions ──► Kafka ──► Flink                              │
-│                               │                                  │
-│                   ┌───────────┴───────────┐                     │
-│                   ▼                       ▼                     │
-│           ┌─────────────┐         ┌─────────────┐               │
-│           │   Pattern   │         │     ML      │               │
-│           │  Detection  │         │   Scoring   │               │
-│           │  (rules)    │         │  (model)    │               │
-│           └──────┬──────┘         └──────┬──────┘               │
-│                  │                       │                      │
-│                  └───────────┬───────────┘                      │
-│                              ▼                                   │
-│                      ┌─────────────┐                            │
-│                      │   Combine   │                            │
-│                      │   Results   │                            │
-│                      └──────┬──────┘                            │
-│                             │                                    │
-│               ┌─────────────┴─────────────┐                     │
-│               ▼                           ▼                     │
-│        ┌───────────┐               ┌───────────┐                │
-│        │   Block   │               │   Alert   │                │
-│        │Transaction│               │   Team    │                │
-│        └───────────┘               └───────────┘                │
-│                                                                  │
-│   Features:                                                      │
-│   • Sub-100ms latency                                           │
-│   • Exactly-once processing                                     │
-│   • Stateful pattern matching                                   │
-│   • ML model inference                                          │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph FRAUD [" "]
+        direction TB
+        F_TITLE["Fraud Detection Pipeline"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Transactions"] --> KAFKA["Kafka"] --> FLINK["Flink"]
+        
+        FLINK --> PAT{"Pattern Detection<br>(rules)"}
+        FLINK --> ML{"ML Scoring<br>(model)"}
+        
+        PAT & ML --> COMB["Combine Results"]
+        
+        COMB --> BLOCK{"Block Transaction"}
+        COMB --> ALERT{"Alert Team"}
+        
+        FEAT["Features:<br>• Sub-100ms latency<br>• Exactly-once processing<br>• Stateful pattern matching<br>• ML model inference"]
+        style FEAT fill:none,stroke:none,text-align:left
+        
+        BLOCK & ALERT ~~~ FEAT
+    end
 ```
 
 ### 3. Real-time ETL to Lakehouse

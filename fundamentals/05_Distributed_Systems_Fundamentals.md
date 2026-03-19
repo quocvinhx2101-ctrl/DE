@@ -87,26 +87,20 @@ flowchart LR
 
 CAP Theorem (Brewer's Theorem) nói rằng một distributed system chỉ có thể đảm bảo tối đa 2 trong 3 thuộc tính:
 
+```mermaid
+flowchart TD
+    C["Consistency (C)"]
+    A["Availability (A)"]
+    P["Partition Tolerance (P)"]
+    
+    C ---|CA systems<br>rare| A
+    C ---|CP systems| P
+    A ---|AP systems| P
 ```
-                          C
-                         /\
-                        /  \
-                       /    \
-                      / CA   \
-                     /  systems\
-                    /    (rare) \
-                   +--------------+
-                  /                \
-                 / CP              AP \
-                / systems        systems\
-               /                        \
-              +------------+-------------+
-             P                           A
 
-C = Consistency
-A = Availability  
-P = Partition Tolerance
-```
+**C = Consistency**
+**A = Availability**
+**P = Partition Tolerance**
 
 **Consistency (C):**
 - Mọi read đều nhận được giá trị mới nhất
@@ -390,32 +384,26 @@ Cons:
 
 **Consistent Hashing:**
 
+**Ring-based approach for dynamic scaling:**
+
+```mermaid
+flowchart LR
+    P1["0° - 90°<br>Partition 1"] --> P2["90° - 180°<br>Partition 2"]
+    P2 --> P3["180° - 270°<br>Partition 3"]
+    P3 --> P4["270° - 360°<br>Partition 4"]
+    P4 --> P1
 ```
-Ring-based approach for dynamic scaling:
 
-          0°
-          |
-    +-----------+
-   /      |      \
-  /   P1  |  P2   \
-270° -----+------ 90°
-  \   P4  |  P3   /
-   \      |      /
-    +-----------+
-          |
-        180°
+Keys hashed to ring position, assigned to next partition clockwise.
 
-Keys hashed to ring position, assigned to next partition clockwise
-
-Adding new partition:
+**Adding new partition:**
 - Only affects adjacent partitions
 - Minimal data movement
 
-Used in:
+**Used in:**
 - Cassandra
 - DynamoDB
 - Riak
-```
 
 **Directory-Based Partitioning:**
 

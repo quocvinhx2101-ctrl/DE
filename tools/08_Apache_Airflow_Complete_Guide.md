@@ -103,119 +103,87 @@ Apache Airflow là một **workflow orchestration platform** cho phép programma
 ### Component Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Airflow Architecture                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                         Web Server                              │ │
-│  │  • Flask-based UI                                              │ │
-│  │  • DAG visualization                                           │ │
-│  │  • Task logs                                                   │ │
-│  │  • REST API                                                    │ │
-│  └─────────────────────────────────┬──────────────────────────────┘ │
-│                                    │                                 │
-│                                    ▼                                 │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                        Metadata Database                        │ │
-│  │  (PostgreSQL/MySQL)                                            │ │
-│  │  • DAG definitions                                             │ │
-│  │  • Task states                                                 │ │
-│  │  • XComs                                                       │ │
-│  │  • Variables, Connections                                      │ │
-│  └─────────────────────────────────┬──────────────────────────────┘ │
-│                                    │                                 │
-│                                    ▼                                 │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                          Scheduler                              │ │
-│  │  • Parses DAG files                                            │ │
-│  │  • Determines task dependencies                                │ │
-│  │  • Queues tasks for execution                                  │ │
-│  │  • Monitors task states                                        │ │
-│  └─────────────────────────────────┬──────────────────────────────┘ │
-│                                    │                                 │
-│                                    ▼                                 │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                          Executor                               │ │
-│  │                                                                 │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │ │
-│  │  │   Local     │  │   Celery    │  │ Kubernetes  │            │ │
-│  │  │  Executor   │  │  Executor   │  │  Executor   │            │ │
-│  │  │(development)│  │ (distributed)│ │ (cloud-native)│           │ │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘            │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                    │                                 │
-│                                    ▼                                 │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                         Workers                                 │ │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐           │ │
-│  │  │ Worker 1│  │ Worker 2│  │ Worker 3│  │ Worker N│           │ │
-│  │  │ (tasks) │  │ (tasks) │  │ (tasks) │  │ (tasks) │           │ │
-│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘           │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ARCH [" "]
+        direction TB
+        A_TITLE["Airflow Architecture"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        WS["Web Server<br>• Flask-based UI<br>• DAG visualization<br>• Task logs<br>• REST API"]
+        MD["Metadata Database<br>(PostgreSQL/MySQL)<br>• DAG definitions<br>• Task states<br>• XComs<br>• Variables, Connections"]
+        SCH["Scheduler<br>• Parses DAG files<br>• Determines task dependencies<br>• Queues tasks for execution<br>• Monitors task states"]
+        
+        subgraph EXC ["Executor"]
+            direction LR
+            E1["Local<br>Executor<br>(development)"]
+            E2["Celery<br>Executor<br>(distributed)"]
+            E3["Kubernetes<br>Executor<br>(cloud-native)"]
+        end
+        
+        subgraph WRK ["Workers"]
+            direction LR
+            W1["Worker 1<br>(tasks)"]
+            W2["Worker 2<br>(tasks)"]
+            W3["Worker 3<br>(tasks)"]
+            WN["Worker N<br>(tasks)"]
+        end
+        
+        WS --> MD
+        MD --> SCH
+        SCH --> EXC
+        EXC --> WRK
+    end
+```
 ```
 
 ### Executor Types
 
 ```
 Executor Comparison:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  LocalExecutor                                                       │
-│  • Single machine                                                   │
-│  • Multiple processes                                               │
-│  • Good for: Development, small workloads                           │
-│                                                                      │
-│  CeleryExecutor                                                      │
-│  • Distributed workers                                              │
-│  • Redis/RabbitMQ as broker                                         │
-│  • Good for: Horizontal scaling, production                         │
-│                                                                      │
-│  KubernetesExecutor                                                  │
-│  • Each task = one Pod                                              │
-│  • Dynamic resource allocation                                      │
-│  • Good for: Cloud-native, variable workloads                       │
-│                                                                      │
-│  CeleryKubernetesExecutor                                            │
-│  • Hybrid: Celery for fast tasks                                    │
-│  • Kubernetes for heavy tasks                                       │
-│  • Good for: Mixed workloads                                        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Executor Comparison**
+> 
+> * **LocalExecutor**
+>   * Single machine
+>   * Multiple processes
+>   * Good for: Development, small workloads
+> 
+> * **CeleryExecutor**
+>   * Distributed workers
+>   * Redis/RabbitMQ as broker
+>   * Good for: Horizontal scaling, production
+> 
+> * **KubernetesExecutor**
+>   * Each task = one Pod
+>   * Dynamic resource allocation
+>   * Good for: Cloud-native, variable workloads
+> 
+> * **CeleryKubernetesExecutor**
+>   * Hybrid: Celery for fast tasks
+>   * Kubernetes for heavy tasks
+>   * Good for: Mixed workloads
 ```
 
 ### DAG File Processing
 
 ```
 DAG Parsing Flow:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. DAG files in dags/ folder                                       │
-│     ┌────────────────────────────────────────────┐                  │
-│     │ my_dag.py                                  │                  │
-│     │ another_dag.py                             │                  │
-│     │ utils/ (helper modules)                    │                  │
-│     └────────────────────────────────────────────┘                  │
-│                              │                                       │
-│                              ▼                                       │
-│  2. Scheduler parses files every N seconds                          │
-│     (dag_dir_list_interval)                                         │
-│                              │                                       │
-│                              ▼                                       │
-│  3. DagBag created with all DAG objects                             │
-│                              │                                       │
-│                              ▼                                       │
-│  4. Metadata stored in database                                     │
-│     • DAG structure                                                 │
-│     • Task dependencies                                             │
-│     • Schedule                                                      │
-│                              │                                       │
-│                              ▼                                       │
-│  5. Scheduler creates DagRuns based on schedule                     │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PARSE [" "]
+        direction TB
+        P_TITLE["DAG Parsing Flow"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        P1["1. DAG files in dags/ folder<br>my_dag.py, another_dag.py, utils/"]
+        P2["2. Scheduler parses files every N seconds<br>(dag_dir_list_interval)"]
+        P3["3. DagBag created with all DAG objects"]
+        P4["4. Metadata stored in database<br>• DAG structure<br>• Task dependencies<br>• Schedule"]
+        P5["5. Scheduler creates DagRuns based on schedule"]
+        
+        P1 --> P2 --> P3 --> P4 --> P5
+    end
+```
 ```
 
 ---
@@ -253,28 +221,29 @@ dag = DAG(
 
 ```
 Task Lifecycle:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  none ──► scheduled ──► queued ──► running ──► success              │
-│                │            │          │                             │
-│                │            │          └──► failed ──► up_for_retry │
-│                │            │                              │        │
-│                │            │                              └──► retry│
-│                │            │                                       │
-│                │            └──► removed                            │
-│                │                                                    │
-│                └──► upstream_failed                                 │
-│                └──► skipped                                         │
-│                                                                      │
-│  State Colors in UI:                                                │
-│  • Green: Success                                                   │
-│  • Red: Failed                                                      │
-│  • Yellow: Running                                                  │
-│  • Orange: Up for retry                                             │
-│  • Pink: Skipped                                                    │
-│  • Light green: Queued                                              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph LIFE [" "]
+        direction TB
+        L_TITLE["Task Lifecycle"]
+        style L_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph FLOW [" "]
+            direction LR
+            N["none"] --> S["scheduled"] --> Q["queued"] --> R["running"] --> SU["success"]
+            
+            R --> F["failed"] --> U["up_for_retry"] --> RE["retry"]
+            Q --> RM["removed"]
+            S --> UF["upstream_failed"]
+            S --> SK["skipped"]
+        end
+        
+        COLORS["State Colors in UI:<br>• Green: Success<br>• Red: Failed<br>• Yellow: Running<br>• Orange: Up for retry<br>• Pink: Skipped<br>• Light green: Queued"]
+        style COLORS fill:none,stroke:none,text-align:left
+        
+        FLOW ~~~ COLORS
+    end
+```
 ```
 
 ### 3. XCom (Cross-Communication)
@@ -1004,87 +973,74 @@ spark_dag = spark_etl_pipeline()
 ### 1. Data Warehouse ETL
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Typical DWH ETL Pipeline                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐           │
-│  │   Sources   │ ──► │   Staging   │ ──► │    Data     │           │
-│  │             │     │             │     │  Warehouse  │           │
-│  └─────────────┘     └─────────────┘     └─────────────┘           │
-│                                                                      │
-│  Airflow DAG:                                                        │
-│                                                                      │
-│  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌───────┐ │
-│  │ Extract │──►│  Stage  │──►│Transform│──►│  Load   │──►│Quality│ │
-│  │  Tasks  │   │  Tables │   │  (dbt)  │   │  Marts  │   │ Tests │ │
-│  └─────────┘   └─────────┘   └─────────┘   └─────────┘   └───────┘ │
-│                                                                      │
-│  Schedule: Daily at 6 AM                                            │
-│  Dependencies: Wait for source data freshness                       │
-│  Alerting: Slack on failure                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph DWH [" "]
+        direction TB
+        D_TITLE["Typical DWH ETL Pipeline"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Sources"] --> STG["Staging"] --> DW["Data Warehouse"]
+        
+        subgraph DAG ["Airflow DAG"]
+            direction LR
+            T1["Extract<br>Tasks"] --> T2["Stage<br>Tables"] --> T3["Transform<br>(dbt)"] --> T4["Load<br>Marts"] --> T5["Quality<br>Tests"]
+        end
+        
+        META["Schedule: Daily at 6 AM<br>Dependencies: Wait for source data freshness<br>Alerting: Slack on failure"]
+        style META fill:none,stroke:none,text-align:left
+        
+        SRC ~~~ DAG
+        DAG ~~~ META
+    end
+```
 ```
 
 ### 2. ML Pipeline Orchestration
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     ML Training Pipeline                             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                        Weekly DAG                             │   │
-│  │                                                               │   │
-│  │  ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐          │   │
-│  │  │ Extract│──►│Feature │──►│ Train  │──►│Evaluate│          │   │
-│  │  │  Data  │   │  Eng   │   │ Model  │   │ Model  │          │   │
-│  │  └────────┘   └────────┘   └────────┘   └────────┘          │   │
-│  │                                              │                │   │
-│  │                          ┌───────────────────┘                │   │
-│  │                          │                                    │   │
-│  │                          ▼                                    │   │
-│  │                    ┌──────────┐                              │   │
-│  │                    │ Compare  │                              │   │
-│  │                    │   with   │                              │   │
-│  │                    │Production│                              │   │
-│  │                    └─────┬────┘                              │   │
-│  │                          │                                    │   │
-│  │           ┌──────────────┼──────────────┐                    │   │
-│  │           ▼              ▼              ▼                    │   │
-│  │     ┌──────────┐  ┌──────────┐  ┌──────────┐                │   │
-│  │     │  Deploy  │  │ Rollback │  │  Alert   │                │   │
-│  │     │(if better│  │(if worse)│  │  Team    │                │   │
-│  │     └──────────┘  └──────────┘  └──────────┘                │   │
-│  │                                                               │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ML [" "]
+        direction TB
+        M_TITLE["ML Training Pipeline"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph DAG ["Weekly DAG"]
+            direction LR
+            T1["Extract<br>Data"] --> T2["Feature<br>Eng"] --> T3["Train<br>Model"] --> T4["Evaluate<br>Model"]
+            
+            T4 --> C["Compare<br>with<br>Production"]
+            
+            C --> D1["Deploy<br>(if better)"]
+            C --> D2["Rollback<br>(if worse)"]
+            C --> D3["Alert<br>Team"]
+        end
+    end
+```
 ```
 
 ### 3. Real-time + Batch Hybrid
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Hybrid Processing Pipeline                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Real-time (Kafka + Flink):                                         │
-│  Events ──► Kafka ──► Flink ──► Real-time Views                     │
-│                                                                      │
-│  Batch (Airflow orchestrated):                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Daily Reconciliation DAG                  │    │
-│  │                                                              │    │
-│  │  ┌───────────┐   ┌───────────┐   ┌───────────┐             │    │
-│  │  │  Compact  │──►│ Reconcile │──►│  Update   │             │    │
-│  │  │  Events   │   │   Counts  │   │Historical │             │    │
-│  │  └───────────┘   └───────────┘   │   View    │             │    │
-│  │                                  └───────────┘             │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph HYB [" "]
+        direction TB
+        H_TITLE["Hybrid Processing Pipeline"]
+        style H_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        RT["Real-time (Kafka + Flink):<br>Events ──► Kafka ──► Flink ──► Real-time Views"]
+        style RT fill:none,stroke:none,text-align:left
+        
+        subgraph BATCH ["Batch (Airflow orchestrated): Daily Reconciliation DAG"]
+            direction LR
+            T1["Compact<br>Events"] --> T2["Reconcile<br>Counts"] --> T3["Update<br>Historical<br>View"]
+        end
+        
+        RT ~~~ BATCH
+    end
+```
 ```
 
 ---

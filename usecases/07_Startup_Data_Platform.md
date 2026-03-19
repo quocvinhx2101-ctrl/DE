@@ -64,37 +64,29 @@
 
 **Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Data Sources                              │
-├─────────────┬──────────────┬───────────────┬────────────────┤
-│  Shopify    │   Facebook   │   Google      │    Stripe      │
-│   Orders    │     Ads      │   Analytics   │   Payments     │
-└──────┬──────┴──────┬───────┴───────┬───────┴────────┬───────┘
-       │             │               │                │
-       ▼             ▼               ▼                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Fivetran (EL)                            │
-│              Managed connectors, 15-min sync                 │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    BigQuery (Warehouse)                      │
-│                   Raw → Staging → Marts                      │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      dbt Cloud (Transform)                   │
-│                 Models, Tests, Documentation                 │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Metabase (BI)                             │
-│              Dashboards, Self-serve Analytics                │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ECOMMERCE [" "]
+        direction TB
+        
+        subgraph SRC ["Data Sources"]
+            direction LR
+            S1["Shopify<br>Orders"]
+            S2["Facebook<br>Ads"]
+            S3["Google<br>Analytics"]
+            S4["Stripe<br>Payments"]
+        end
+        
+        FIVETRAN["Fivetran (EL)<br>Managed connectors, 15-min sync"]
+        BQ["BigQuery (Warehouse)<br>Raw → Staging → Marts"]
+        DBT["dbt Cloud (Transform)<br>Models, Tests, Documentation"]
+        MB["Metabase (BI)<br>Dashboards, Self-serve Analytics"]
+        
+        SRC --> FIVETRAN
+        FIVETRAN --> BQ
+        BQ --> DBT
+        DBT --> MB
+    end
 ```
 
 **Tech Stack:**
@@ -373,34 +365,32 @@ left join rfm_scores rfm using (customer_id)
 
 **Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Event Sources                             │
-├─────────────────┬───────────────────┬───────────────────────┤
-│   Web App       │    Mobile App     │      Backend API      │
-│  (Segment.js)   │   (Segment SDK)   │    (Segment API)      │
-└────────┬────────┴─────────┬─────────┴───────────┬───────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Segment CDP                              │
-│         Event collection, identity resolution                │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            ▼
-┌───────────────┐  ┌─────────────┐  ┌──────────────┐
-│   Amplitude   │  │  Snowflake  │  │   Customer   │
-│  (Product     │  │ (Warehouse) │  │   Hubspot    │
-│   Analytics)  │  │             │  │  (CRM Sync)  │
-└───────────────┘  └──────┬──────┘  └──────────────┘
-                          │
-                          ▼
-               ┌─────────────────────┐
-               │    dbt + Preset     │
-               │  (Transform + BI)   │
-               └─────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SAAS [" "]
+        direction TB
+        
+        subgraph EVT ["Event Sources"]
+            direction LR
+            WA["Web App<br>(Segment.js)"]
+            MA["Mobile App<br>(Segment SDK)"]
+            BA["Backend API<br>(Segment API)"]
+        end
+        
+        SEG["Segment CDP<br>Event collection, identity resolution"]
+        
+        AMP["Amplitude<br>(Product Analytics)"]
+        SF["Snowflake<br>(Warehouse)"]
+        HUB["Customer Hubspot<br>(CRM Sync)"]
+        
+        DBT["dbt + Preset<br>(Transform + BI)"]
+        
+        EVT --> SEG
+        SEG --> AMP
+        SEG --> SF
+        SEG --> HUB
+        SF --> DBT
+    end
 ```
 
 **Event Tracking Plan:**

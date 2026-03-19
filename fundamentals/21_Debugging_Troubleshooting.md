@@ -20,19 +20,18 @@
 
 ### Tại Sao Debugging Là Kỹ Năng #1?
 
-```
-Budget breakdown thời gian của DE thực tế:
-┌──────────────────────────────────┐
-│ 40%  Debugging & fixing issues   │ ← CHỦ YẾU LÀ ĐÂY
-│ 25%  Maintaining existing pipes  │
-│ 20%  Building new pipelines      │
-│ 10%  Meetings & communication    │
-│  5%  Learning new tools          │
-└──────────────────────────────────┘
-
-→ 65% = fix + maintain. Chỉ 20% thực sự build mới.
-→ Debugging tốt = Bạn nhanh hơn người khác 3-5x
-```
+> **📊 Budget breakdown thời gian của DE thực tế:**
+> 
+> | % Time | Activity | Note |
+> |---|---|---|
+> | **40%** | **Debugging & fixing issues** | ← *CHỦ YẾU LÀ ĐÂY* |
+> | 25% | Maintaining existing pipes | |
+> | 20% | Building new pipelines | |
+> | 10% | Meetings & communication | |
+> | 5% | Learning new tools | |
+> 
+> → 65% = fix + maintain. Chỉ 20% thực sự build mới.
+> → Debugging tốt = Bạn nhanh hơn người khác 3-5x
 
 ### Junior vs Senior Debugging
 
@@ -246,21 +245,23 @@ spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
 
 ### Pattern 2: OOM (Out of Memory)
 
-```
-Symptom: "java.lang.OutOfMemoryError: Java heap space"
-         "Container killed by YARN for exceeding memory limits"
-
-Decision tree:
-┌─ OOM Error
-├── Driver OOM?
-│   ├── .collect() on large data → Don't collect!
-│   ├── Large broadcast variable → Reduce or don't broadcast
-│   └── Too many small files → Coalesce first
-└── Executor OOM?
-    ├── Data skew → See Pattern 1
-    ├── Cartesian join → Fix join condition
-    ├── Large aggregation → Increase partitions
-    └── UDF memory leak → Check UDF code
+**Decision tree:**
+```mermaid
+flowchart LR
+    OOM["OOM (Out of Memory) Error"]
+    
+    OOM --> DRV["Driver OOM?"]
+    DRV --> D1[".collect() on large data<br>→ Don't collect!"]
+    DRV --> D2["Large broadcast variable<br>→ Reduce or don't broadcast"]
+    DRV --> D3["Too many small files<br>→ Coalesce first"]
+    
+    OOM --> EXE["Executor OOM?"]
+    EXE --> E1["Data skew<br>→ See Pattern 1"]
+    EXE --> E2["Cartesian join<br>→ Fix join condition"]
+    EXE --> E3["Large aggregation<br>→ Increase partitions"]
+    EXE --> E4["UDF memory leak<br>→ Check UDF code"]
+    
+    style OOM fill:#ffebee,stroke:#c62828,font-weight:bold
 ```
 
 ```python

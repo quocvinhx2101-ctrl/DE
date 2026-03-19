@@ -55,36 +55,29 @@
 
 **Data Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Data Sources                              │
-├──────────────┬──────────────┬──────────────┬────────────────┤
-│   Stripe     │   HubSpot    │   Product    │   Intercom     │
-│  (Billing)   │    (CRM)     │   (Events)   │   (Support)    │
-└──────┬───────┴──────┬───────┴──────┬───────┴───────┬────────┘
-       │              │              │               │
-       ▼              ▼              ▼               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Fivetran / Airbyte                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Snowflake                               │
-│                  Raw → Staging → Marts                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                          dbt                                 │
-│              Subscription Models + Metrics                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Preset / Sigma                            │
-│                  Executive Dashboards                        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SAAS [" "]
+        direction TB
+        
+        subgraph SRC ["Data Sources"]
+            direction LR
+            ST["Stripe<br>(Billing)"]
+            HS["HubSpot<br>(CRM)"]
+            PR["Product<br>(Events)"]
+            IC["Intercom<br>(Support)"]
+        end
+        
+        EL["Fivetran / Airbyte"]
+        WH["Snowflake<br>Raw → Staging → Marts"]
+        DBT["dbt<br>Subscription Models + Metrics"]
+        BI["Preset / Sigma<br>Executive Dashboards"]
+        
+        SRC --> EL
+        EL --> WH
+        WH --> DBT
+        DBT --> BI
+    end
 ```
 
 **Key dbt Models:**

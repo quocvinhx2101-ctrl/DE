@@ -226,28 +226,21 @@ GROUP BY 1, 2;
 
 ### Dashboard Layout
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    DATA QUALITY DASHBOARD                    │
-├─────────────────────────────────────────────────────────────┤
-│ Overall DQ Score: 98.5% ✅    │  Last Updated: 2 hours ago  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Table Health:                                              │
-│  ┌─────────────┬─────────┬───────────┬─────────────────┐   │
-│  │ Table       │ Score   │ Freshness │ Issues          │   │
-│  ├─────────────┼─────────┼───────────┼─────────────────┤   │
-│  │ orders      │ 100%    │ 1h        │ None            │   │
-│  │ customers   │ 99%     │ 1h        │ 3 null emails   │   │
-│  │ products    │ 95%     │ 24h ⚠️    │ Stale           │   │
-│  └─────────────┴─────────┴───────────┴─────────────────┘   │
-│                                                             │
-│  Recent Issues:                                             │
-│  • 2024-01-15: products table delay (resolved)             │
-│  • 2024-01-10: 5 duplicate orders detected (fixed)         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+> **📊 DATA QUALITY DASHBOARD**
+> 
+> **Overall DQ Score:** 98.5% ✅ | **Last Updated:** 2 hours ago
+> 
+> **Table Health:**
+> 
+> | Table | Score | Freshness | Issues |
+> |-------|-------|-----------|--------|
+> | orders | 100% | 1h | None |
+> | customers | 99% | 1h | 3 null emails |
+> | products | 95% | 24h ⚠️ | Stale |
+> 
+> **Recent Issues:**
+> - 2024-01-15: products table delay (resolved)
+> - 2024-01-10: 5 duplicate orders detected (fixed)
 
 ---
 

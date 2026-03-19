@@ -82,8 +82,8 @@ This breaks every Tuesday when Dave's laptop goes to sleep. Sales: "Why is the h
 
 ```mermaid
 flowchart LR
-    BQ["📊 BigQuery\n(gold.customer_health_scores)"] 
-    RETL["🔄 Reverse ETL Engine\n• Incremental diff detection\n• Rate limit aware\n• Error handling\n• Monitoring"]
+    BQ["📊 BigQuery<br>(gold.customer_health_scores)"] 
+    RETL["🔄 Reverse ETL Engine<br>• Incremental diff detection<br>• Rate limit aware<br>• Error handling<br>• Monitoring"]
     SF["💼 Salesforce\n(Account.Health_Score__c)"]
     HB["📧 HubSpot\n(Contact segments)"]
     ZD["🎫 Zendesk\n(Ticket priority)"]

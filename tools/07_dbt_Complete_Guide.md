@@ -97,31 +97,30 @@ dbt (data build tool) là một **transformation workflow tool** cho phép data 
 ### dbt Ecosystem
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        dbt Ecosystem                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      dbt Core (OSS)                          │    │
-│  │  CLI tool for running dbt projects                          │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              │                                       │
-│              ┌───────────────┼───────────────┐                      │
-│              ▼               ▼               ▼                      │
-│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐       │
-│  │   dbt Cloud     │ │  dbt Adapters   │ │  dbt Packages   │       │
-│  │  (Managed SaaS) │ │  (Connectors)   │ │   (Libraries)   │       │
-│  │                 │ │                 │ │                 │       │
-│  │ • IDE           │ │ • Snowflake     │ │ • dbt_utils     │       │
-│  │ • Scheduler     │ │ • BigQuery      │ │ • codegen       │       │
-│  │ • CI/CD         │ │ • Redshift      │ │ • audit_helper  │       │
-│  │ • Semantic Layer│ │ • Databricks    │ │ • elementary    │       │
-│  │ • Discovery     │ │ • Postgres      │ │ • dbt_date      │       │
-│  │ • Observability │ │ • DuckDB        │ │ • re_data       │       │
-│  └─────────────────┘ │ • Iceberg       │ └─────────────────┘       │
-│                      └─────────────────┘                            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ECO [" "]
+        direction TB
+        E_TITLE["dbt Ecosystem"]
+        style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        CORE["dbt Core (OSS)<br>CLI tool for running dbt projects"]
+        
+        subgraph COMPS [" "]
+            direction LR
+            CLOUD["dbt Cloud<br>(Managed SaaS)<br>• IDE<br>• Scheduler<br>• CI/CD<br>• Semantic Layer<br>• Discovery<br>• Observability"]
+            style CLOUD text-align:left
+            ADAPT["dbt Adapters<br>(Connectors)<br>• Snowflake<br>• BigQuery<br>• Redshift<br>• Databricks<br>• Postgres<br>• DuckDB<br>• Iceberg"]
+            style ADAPT text-align:left
+            PACK["dbt Packages<br>(Libraries)<br>• dbt_utils<br>• codegen<br>• audit_helper<br>• elementary<br>• dbt_date<br>• re_data"]
+            style PACK text-align:left
+        end
+        
+        CORE --> CLOUD
+        CORE --> ADAPT
+        CORE --> PACK
+    end
+```
 ```
 
 ---
@@ -172,78 +171,83 @@ my_dbt_project/
 ### How dbt Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        dbt Execution Flow                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  1. Parse Project                                                    │
-│     ┌────────────────────────────────────────────────────┐          │
-│     │ Read dbt_project.yml, profiles.yml                 │          │
-│     │ Parse all SQL/Python models                        │          │
-│     │ Build dependency graph (DAG)                       │          │
-│     └────────────────────────────────────────────────────┘          │
-│                              │                                       │
-│                              ▼                                       │
-│  2. Compile SQL                                                      │
-│     ┌────────────────────────────────────────────────────┐          │
-│     │ Replace Jinja templates with actual SQL            │          │
-│     │ Resolve {{ ref('model') }} to actual table names   │          │
-│     │ Apply macros                                       │          │
-│     └────────────────────────────────────────────────────┘          │
-│                              │                                       │
-│                              ▼                                       │
-│  3. Execute on Warehouse                                             │
-│     ┌────────────────────────────────────────────────────┐          │
-│     │ Run compiled SQL in dependency order               │          │
-│     │ Create/Replace tables or views                     │          │
-│     │ Run tests                                          │          │
-│     │ Generate documentation                             │          │
-│     └────────────────────────────────────────────────────┘          │
-│                                                                      │
-│  Example:                                                            │
-│                                                                      │
-│  stg_orders.sql:                                                    │
-│  SELECT * FROM {{ source('raw', 'orders') }}                        │
-│                                                                      │
-│  Compiles to:                                                        │
-│  SELECT * FROM raw_database.raw_schema.orders                       │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph EXEC [" "]
+        direction TB
+        E_TITLE["dbt Execution Flow"]
+        style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        P1["1. Parse Project"]
+        D1["Read dbt_project.yml, profiles.yml<br>Parse all SQL/Python models<br>Build dependency graph (DAG)"]
+        style D1 fill:none,stroke:none,text-align:left
+        P1 --- D1
+        
+        P2["2. Compile SQL"]
+        D2["Replace Jinja templates with actual SQL<br>Resolve {{ ref('model') }} to actual table names<br>Apply macros"]
+        style D2 fill:none,stroke:none,text-align:left
+        P2 --- D2
+        
+        P3["3. Execute on Warehouse"]
+        D3["Run compiled SQL in dependency order<br>Create/Replace tables or views<br>Run tests<br>Generate documentation"]
+        style D3 fill:none,stroke:none,text-align:left
+        P3 --- D3
+        
+        P1 --> P2 --> P3
+        
+        EX["Example:<br>stg_orders.sql: SELECT * FROM {{ source('raw', 'orders') }}<br><br>Compiles to:<br>SELECT * FROM raw_database.raw_schema.orders"]
+        style EX fill:none,stroke:none,text-align:left
+        
+        P3 ~~~ EX
+    end
+```
 ```
 
 ### DAG (Directed Acyclic Graph)
 
 ```
 dbt Model Dependencies:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Sources (Raw Data)                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │ raw.orders  │  │raw.customers│  │raw.products │                 │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                 │
-│         │                │                │                         │
-│         ▼                ▼                ▼                         │
-│  Staging (1:1 transformations)                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │ stg_orders  │  │stg_customers│  │stg_products │                 │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                 │
-│         │                │                │                         │
-│         └────────────────┼────────────────┘                         │
-│                          │                                          │
-│                          ▼                                          │
-│  Intermediate (Business Logic)                                      │
-│  ┌────────────────────────────────────────┐                        │
-│  │         int_orders_enriched            │                        │
-│  └────────────────────┬───────────────────┘                        │
-│                       │                                             │
-│            ┌──────────┴──────────┐                                 │
-│            ▼                     ▼                                 │
-│  Marts (Final Models)                                               │
-│  ┌─────────────────┐     ┌─────────────────┐                       │
-│  │  fct_orders     │     │  dim_customers  │                       │
-│  └─────────────────┘     └─────────────────┘                       │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph DAG [" "]
+        direction TB
+        D_TITLE["dbt Model Dependencies"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph SRC ["Sources (Raw Data)"]
+            direction LR
+            S1["raw.orders"]
+            S2["raw.customers"]
+            S3["raw.products"]
+        end
+        
+        subgraph STG ["Staging (1:1 transformations)"]
+            direction LR
+            ST1["stg_orders"]
+            ST2["stg_customers"]
+            ST3["stg_products"]
+        end
+        
+        S1 --> ST1
+        S2 --> ST2
+        S3 --> ST3
+        
+        INT["Intermediate (Business Logic)<br>int_orders_enriched"]
+        
+        ST1 --> INT
+        ST2 --> INT
+        ST3 --> INT
+        
+        subgraph MARTS ["Marts (Final Models)"]
+            direction LR
+            M1["fct_orders"]
+            M2["dim_customers"]
+        end
+        
+        INT --> M1
+        INT --> M2
+    end
+```
 ```
 
 ---
@@ -357,25 +361,23 @@ FROM {{ source('raw', 'values') }}
 
 ```
 Strategy Options:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. append                                                           │
-│     Simply INSERT new rows                                          │
-│     Use when: No updates, append-only                               │
-│                                                                      │
-│  2. merge (default for most warehouses)                             │
-│     MERGE on unique_key                                             │
-│     Use when: Need to UPDATE existing rows                          │
-│                                                                      │
-│  3. delete+insert                                                    │
-│     Delete matching rows, then insert                               │
-│     Use when: Merge not available/efficient                         │
-│                                                                      │
-│  4. insert_overwrite                                                 │
-│     Replace entire partitions                                       │
-│     Use when: Partition-level updates                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Strategy Options**
+> 
+> 1. **append**
+>    * Simply `INSERT` new rows
+>    * Use when: No updates, append-only
+> 
+> 2. **merge (default for most warehouses)**
+>    * `MERGE` on unique_key
+>    * Use when: Need to UPDATE existing rows
+> 
+> 3. **delete+insert**
+>    * Delete matching rows, then insert
+>    * Use when: Merge not available/efficient
+> 
+> 4. **insert_overwrite**
+>    * Replace entire partitions
+>    * Use when: Partition-level updates
 ```
 
 ### Snapshots (SCD Type 2)
@@ -936,62 +938,73 @@ dbt debug
 ### 1. Analytics Engineering Stack
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│               Modern Analytics Engineering Stack                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Data Sources ──► Fivetran/Airbyte ──► Snowflake                    │
-│                      (Extract/Load)      (Storage)                   │
-│                                              │                       │
-│                                              ▼                       │
-│                                    ┌─────────────────┐              │
-│                                    │      dbt        │              │
-│                                    │  (Transform)    │              │
-│                                    │                 │              │
-│                                    │  staging/       │              │
-│                                    │  intermediate/  │              │
-│                                    │  marts/         │              │
-│                                    └────────┬────────┘              │
-│                                             │                        │
-│                      ┌──────────────────────┼──────────────────┐    │
-│                      ▼                      ▼                  ▼    │
-│               ┌───────────┐          ┌───────────┐      ┌─────────┐│
-│               │  Looker   │          │  Tableau  │      │   Mode  ││
-│               └───────────┘          └───────────┘      └─────────┘│
-│                  (BI Tools)                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph STACK [" "]
+        direction TB
+        S_TITLE["Modern Analytics Engineering Stack"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Data Sources"] -->|"Extract/Load"| EL["Fivetran/Airbyte"] -->|"Storage"| SNOW["Snowflake"]
+        
+        subgraph DBT ["dbt (Transform)"]
+            direction TB
+            STG["staging/"]
+            INT["intermediate/"]
+            MAR["marts/"]
+            STG ~~~ INT ~~~ MAR
+        end
+        
+        SNOW --> DBT
+        
+        subgraph BI ["BI Tools"]
+            direction LR
+            L["Looker"]
+            T["Tableau"]
+            M["Mode"]
+        end
+        
+        DBT --> L
+        DBT --> T
+        DBT --> M
+    end
+```
 ```
 
 ### 2. Data Mesh with dbt Mesh
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    dbt Mesh (Multi-Project)                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐│
-│  │  Sales Domain   │     │ Marketing Domain│     │ Finance Domain  ││
-│  │  (dbt project)  │     │  (dbt project)  │     │  (dbt project)  ││
-│  │                 │     │                 │     │                 ││
-│  │  dim_products   │────►│  mkt_campaigns  │     │  fin_revenue    ││
-│  │  fct_sales      │     │  mkt_attribution│◄────│  fin_costs      ││
-│  │                 │     │                 │     │                 ││
-│  └─────────────────┘     └─────────────────┘     └─────────────────┘│
-│           │                       │                       │         │
-│           │              Cross-references                 │         │
-│           │                (dbt_project.yml)              │         │
-│           └───────────────────────┴───────────────────────┘         │
-│                                                                      │
-│  # dbt_project.yml (Marketing)                                      │
-│  dependencies:                                                       │
-│    - project: sales_domain                                          │
-│      version: ">=1.0.0"                                             │
-│                                                                      │
-│  # model usage                                                       │
-│  SELECT * FROM {{ ref('sales_domain', 'dim_products') }}            │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MESH [" "]
+        direction TB
+        M_TITLE["dbt Mesh (Multi-Project)"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph D_SALES ["Sales Domain (dbt project)"]
+            S1["dim_products"]
+            S2["fct_sales"]
+        end
+        
+        subgraph D_MKT ["Marketing Domain (dbt project)"]
+            M1["mkt_campaigns"]
+            M2["mkt_attribution"]
+        end
+        
+        subgraph D_FIN ["Finance Domain (dbt project)"]
+            F1["fin_revenue"]
+            F2["fin_costs"]
+        end
+        
+        S1 --> M1
+        M2 -.-> F2
+        
+        CROSS["Cross-references (dbt_project.yml)<br># dbt_project.yml (Marketing)<br>dependencies:<br>  - project: sales_domain<br>    version: '>=1.0.0'<br><br># model usage<br>SELECT * FROM {{ ref('sales_domain', 'dim_products') }}"]
+        style CROSS fill:none,stroke:none,text-align:left
+        
+        D_MKT ~~~ CROSS
+    end
+```
 ```
 
 ### 3. CI/CD Pipeline
@@ -1079,27 +1092,25 @@ models:
 
 ```
 Testing Levels:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. Source Tests                                                     │
-│     - Freshness checks                                              │
-│     - Row count expectations                                        │
-│                                                                      │
-│  2. Staging Tests                                                    │
-│     - not_null on PKs                                               │
-│     - unique on PKs                                                 │
-│     - accepted_values for enums                                     │
-│                                                                      │
-│  3. Mart Tests                                                       │
-│     - Relationships (FK integrity)                                  │
-│     - Business logic validation                                     │
-│     - dbt_expectations (advanced)                                   │
-│                                                                      │
-│  4. Unit Tests (dbt 1.8+)                                           │
-│     - Test specific transformations                                 │
-│     - Edge cases                                                    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Testing Levels**
+> 
+> 1. **Source Tests**
+>    - Freshness checks
+>    - Row count expectations
+> 
+> 2. **Staging Tests**
+>    - `not_null` on PKs
+>    - `unique` on PKs
+>    - `accepted_values` for enums
+> 
+> 3. **Mart Tests**
+>    - Relationships (FK integrity)
+>    - Business logic validation
+>    - `dbt_expectations` (advanced)
+> 
+> 4. **Unit Tests (dbt 1.8+)**
+>    - Test specific transformations
+>    - Edge cases
 ```
 
 ### 4. Performance Tips

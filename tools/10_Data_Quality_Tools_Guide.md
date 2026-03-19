@@ -21,68 +21,30 @@
 ### Data Quality Landscape
 
 ```
-Data Quality Stack:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Data Observability                        │    │
-│  │  (Proactive monitoring, anomaly detection)                  │    │
-│  │                                                              │    │
-│  │  Monte Carlo, Bigeye, Anomalo, Metaplane                    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Data Testing/Validation                   │    │
-│  │  (Explicit assertions, unit tests for data)                 │    │
-│  │                                                              │    │
-│  │  Great Expectations, Soda, dbt tests                        │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Data Profiling                            │    │
-│  │  (Understanding data characteristics)                       │    │
-│  │                                                              │    │
-│  │  All tools above + Pandas Profiling, ydata-profiling        │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Data Quality Stack:**
+> 
+> * **Data Observability** (Proactive monitoring, anomaly detection)
+>   * Monte Carlo, Bigeye, Anomalo, Metaplane
+> 
+> * **Data Testing/Validation** (Explicit assertions, unit tests for data)
+>   * Great Expectations, Soda, dbt tests
+> 
+> * **Data Profiling** (Understanding data characteristics)
+>   * All tools above + Pandas Profiling, ydata-profiling
 ```
 
 ### Key Data Quality Dimensions
 
 ```
-Data Quality Dimensions:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  1. Accuracy                                                         │
-│     Data reflects real-world correctly                              │
-│     Example: Email format is valid                                  │
-│                                                                      │
-│  2. Completeness                                                     │
-│     All required data is present                                    │
-│     Example: No null values in required fields                      │
-│                                                                      │
-│  3. Consistency                                                      │
-│     Data is uniform across systems                                  │
-│     Example: Same customer ID format everywhere                     │
-│                                                                      │
-│  4. Timeliness                                                       │
-│     Data is up-to-date                                              │
-│     Example: Data arrives within SLA                                │
-│                                                                      │
-│  5. Uniqueness                                                       │
-│     No duplicates exist                                             │
-│     Example: One record per customer                                │
-│                                                                      │
-│  6. Validity                                                         │
-│     Data conforms to defined rules                                  │
-│     Example: Age between 0 and 150                                  │
-│                                                                      │
-│  7. Volume                                                           │
-│     Expected amount of data present                                 │
-│     Example: Daily records count within range                       │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Data Quality Dimensions:**
+> 
+> 1. **Accuracy**: Data reflects real-world correctly (Example: Email format is valid)
+> 2. **Completeness**: All required data is present (Example: No null values in required fields)
+> 3. **Consistency**: Data is uniform across systems (Example: Same customer ID format everywhere)
+> 4. **Timeliness**: Data is up-to-date (Example: Data arrives within SLA)
+> 5. **Uniqueness**: No duplicates exist (Example: One record per customer)
+> 6. **Validity**: Data conforms to defined rules (Example: Age between 0 and 150)
+> 7. **Volume**: Expected amount of data present (Example: Daily records count within range)
 ```
 
 ---
@@ -106,32 +68,34 @@ Great Expectations là một **open-source Python library** cho data validation,
 ### Architecture
 
 ```
-Great Expectations Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      GX Context                              │    │
-│  │  Central configuration and state management                 │    │
-│  │                                                              │    │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐    │    │
-│  │  │ Data Sources  │  │ Expectation   │  │  Checkpoints  │    │    │
-│  │  │               │  │    Suites     │  │               │    │    │
-│  │  │ • Pandas      │  │               │  │ Batch +       │    │    │
-│  │  │ • Spark       │  │ Collection of │  │ Suite +       │    │    │
-│  │  │ • SQL         │  │ expectations  │  │ Actions       │    │    │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘    │    │
-│  │                                                              │    │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐    │    │
-│  │  │   Actions     │  │   Stores      │  │  Data Docs    │    │    │
-│  │  │               │  │               │  │               │    │    │
-│  │  │ • Email       │  │ • Local       │  │ Static HTML   │    │    │
-│  │  │ • Slack       │  │ • S3          │  │ documentation │    │    │
-│  │  │ • Custom      │  │ • Database    │  │               │    │    │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘    │    │
-│  │                                                              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ARCH [" "]
+        direction TB
+        A_TITLE["Great Expectations Architecture"]
+        style A_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        CTX["GX Context<br>Central configuration and state management"]
+        
+        subgraph COMPS [" "]
+            direction LR
+            DS["Data Sources<br>• Pandas<br>• Spark<br>• SQL"]
+            ES["Expectation Suites<br>Collection of expectations"]
+            CP["Checkpoints<br>Batch + Suite + Actions"]
+            
+            ACT["Actions<br>• Email<br>• Slack<br>• Custom"]
+            STR["Stores<br>• Local<br>• S3<br>• Database"]
+            DD["Data Docs<br>Static HTML documentation"]
+            
+            DS ~~~ ACT
+            ES ~~~ STR
+            CP ~~~ DD
+        end
+        style COMPS fill:none,stroke:none
+        
+        CTX --- COMPS
+    end
+```
 ```
 
 ### Core Concepts
@@ -376,100 +340,88 @@ Monte Carlo là một **data observability platform** tập trung vào automated
 ### Architecture
 
 ```
-Monte Carlo Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                    Monte Carlo Cloud                         │    │
-│  │                                                              │    │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │    │
-│  │  │  Anomaly  │  │  Lineage  │  │  Catalog  │  │   Root    │ │    │
-│  │  │ Detection │  │           │  │           │  │  Cause    │ │    │
-│  │  │   (ML)    │  │           │  │           │  │ Analysis  │ │    │
-│  │  └───────────┘  └───────────┘  └───────────┘  └───────────┘ │    │
-│  │                                                              │    │
-│  │  ┌───────────────────────────────────────────────────────┐  │    │
-│  │  │                    Monitors                            │  │    │
-│  │  │  • Freshness  • Volume  • Schema  • Distribution      │  │    │
-│  │  │  • Custom SQL  • Field Health  • Dimension Tracking   │  │    │
-│  │  └───────────────────────────────────────────────────────┘  │    │
-│  │                                                              │    │
-│  └──────────────────────────────┬───────────────────────────────┘    │
-│                                 │                                     │
-│                           Data Collector                             │
-│                                 │                                     │
-│     ┌───────────────────────────┼───────────────────────────┐       │
-│     ▼                           ▼                           ▼       │
-│  ┌──────────┐            ┌──────────┐            ┌──────────┐       │
-│  │Snowflake │            │ BigQuery │            │  dbt     │       │
-│  │          │            │          │            │          │       │
-│  └──────────┘            └──────────┘            └──────────┘       │
-│                                                                      │
-│  Supported Integrations:                                             │
-│  Warehouses: Snowflake, BigQuery, Redshift, Databricks              │
-│  Orchestrators: Airflow, dbt, Dagster, Prefect                      │
-│  BI: Looker, Tableau, Mode                                          │
-│  Notification: Slack, PagerDuty, Email                              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MC [" "]
+        direction TB
+        M_TITLE["Monte Carlo Architecture"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CLOUD ["Monte Carlo Cloud"]
+            direction TB
+            subgraph FEAT [" "]
+                direction LR
+                AD["Anomaly<br>Detection<br>(ML)"]
+                LN["Lineage"]
+                CA["Catalog"]
+                RC["Root<br>Cause<br>Analysis"]
+            end
+            style FEAT fill:none,stroke:none
+            
+            MON["Monitors<br>• Freshness • Volume • Schema • Distribution<br>• Custom SQL • Field Health • Dimension Tracking"]
+            
+            FEAT ~~~ MON
+        end
+        
+        DC["Data Collector"]
+        
+        subgraph INT [" "]
+            direction LR
+            S1["Snowflake"]
+            S2["BigQuery"]
+            S3["dbt"]
+        end
+        style INT fill:none,stroke:none
+        
+        CLOUD <--> DC
+        DC <--> INT
+        
+        SUP["Supported Integrations:<br>Warehouses: Snowflake, BigQuery, Redshift, Databricks<br>Orchestrators: Airflow, dbt, Dagster, Prefect<br>BI: Looker, Tableau, Mode<br>Notification: Slack, PagerDuty, Email"]
+        style SUP fill:none,stroke:none,text-align:left
+        
+        INT ~~~ SUP
+    end
+```
 ```
 
 ### Core Concepts
 
 **1. Automated Monitors:**
 ```
-Monitor Types:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Freshness Monitor                                                   │
-│  • Detects when data stops arriving                                 │
-│  • "Table hasn't been updated in 6 hours"                           │
-│                                                                      │
-│  Volume Monitor                                                      │
-│  • Detects unusual row count changes                                │
-│  • "50% fewer rows than expected"                                   │
-│                                                                      │
-│  Schema Monitor                                                      │
-│  • Detects column additions/removals                                │
-│  • "Column 'user_id' was removed"                                   │
-│                                                                      │
-│  Distribution Monitor (Field Health)                                │
-│  • Detects data distribution anomalies                              │
-│  • "NULL rate increased from 1% to 15%"                             │
-│  • "Average value dropped 40%"                                      │
-│                                                                      │
-│  Custom SQL Monitor                                                  │
-│  • Your own assertions                                              │
-│  • "SELECT COUNT(*) FROM orders WHERE amount < 0"                   │
-│                                                                      │
-│  Dimension Tracking                                                  │
-│  • Segment-level monitoring                                         │
-│  • "Region=APAC volume dropped 80%"                                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Monitor Types:**
+> 
+> * **Freshness Monitor**: Detects when data stops arriving ("Table hasn't been updated in 6 hours")
+> * **Volume Monitor**: Detects unusual row count changes ("50% fewer rows than expected")
+> * **Schema Monitor**: Detects column additions/removals ("Column 'user_id' was removed")
+> * **Distribution Monitor (Field Health)**: Detects data distribution anomalies ("NULL rate increased from 1% to 15%", "Average value dropped 40%")
+> * **Custom SQL Monitor**: Your own assertions ("SELECT COUNT(*) FROM orders WHERE amount < 0")
+> * **Dimension Tracking**: Segment-level monitoring ("Region=APAC volume dropped 80%")
 ```
 
 **2. Lineage:**
 ```
-End-to-End Lineage:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Source                  Transformation            Consumption       │
-│                                                                      │
-│  [raw.events] ─┬─► [staging.events] ─► [analytics.daily_events]     │
-│                │                              │                      │
-│                │                              └─► [Looker Dashboard]│
-│                │                                                     │
-│                └─► [staging.users] ─► [analytics.user_metrics]      │
-│                                              │                       │
-│                                              └─► [ML Model Feature]  │
-│                                                                      │
-│  When incident occurs:                                               │
-│  • See all downstream affected tables                               │
-│  • Identify root cause upstream                                     │
-│  • Know which dashboards/reports impacted                           │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph LIN [" "]
+        direction TB
+        L_TITLE["End-to-End Lineage"]
+        style L_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph FLOW [" "]
+            direction LR
+            SRC["Source<br>[raw.events]"] --> T1["[staging.events]"] --> C1["Consumption<br>[analytics.daily_events]"]
+            T1 --> C2["[Looker Dashboard]"]
+            
+            SRC --> T2["[staging.users]"] --> C3["[analytics.user_metrics]"]
+            C3 --> C4["[ML Model Feature]"]
+        end
+        
+        INC["When incident occurs:<br>• See all downstream affected tables<br>• Identify root cause upstream<br>• Know which dashboards/reports impacted"]
+        style INC fill:none,stroke:none,text-align:left
+        
+        FLOW ~~~ INC
+    end
+```
 ```
 
 **3. Circuit Breakers:**
@@ -532,37 +484,26 @@ Soda là một **data quality platform** với cả open-source library (Soda Co
 ### Architecture
 
 ```
-Soda Architecture:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Soda Cloud (Optional)                   │    │
-│  │  • Visualization                                            │    │
-│  │  • Anomaly detection                                        │    │
-│  │  • Incident management                                      │    │
-│  │  • Collaboration                                            │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                              ▲                                       │
-│                              │ Results                               │
-│                              │                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                      Soda Core (OSS)                         │    │
-│  │                                                              │    │
-│  │  ┌───────────────────────────────────────────────────────┐  │    │
-│  │  │                    SodaCL Checks                       │  │    │
-│  │  │  • YAML-based check definitions                       │  │    │
-│  │  │  • Human-readable syntax                              │  │    │
-│  │  │  • Built-in check types + custom                      │  │    │
-│  │  └───────────────────────────────────────────────────────┘  │    │
-│  │                                                              │    │
-│  │  ┌───────────────────────────────────────────────────────┐  │    │
-│  │  │                    Data Sources                        │  │    │
-│  │  │  Snowflake, BigQuery, PostgreSQL, Spark, etc.         │  │    │
-│  │  └───────────────────────────────────────────────────────┘  │    │
-│  │                                                              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph SODA [" "]
+        direction TB
+        S_TITLE["Soda Architecture"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SC["Soda Cloud (Optional)<br>• Visualization<br>• Anomaly detection<br>• Incident management<br>• Collaboration"]
+        
+        subgraph CORE ["Soda Core (OSS)"]
+            direction TB
+            CHK["SodaCL Checks<br>• YAML-based check definitions<br>• Human-readable syntax<br>• Built-in check types + custom"]
+            DS["Data Sources<br>Snowflake, BigQuery, PostgreSQL, Spark, etc."]
+            
+            CHK ~~~ DS
+        end
+        
+        CORE -->|"Results"| SC
+    end
+```
 ```
 
 ### SodaCL (Soda Checks Language)
@@ -744,30 +685,25 @@ soda_pipeline()
 ## 📊 Feature Comparison
 
 ```
-Feature Comparison Matrix:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Feature                │ GX       │ Monte Carlo │ Soda             │
-│  ───────────────────────┼──────────┼─────────────┼────────────────  │
-│  Open Source Core       │ ✅ Yes   │ ❌ No       │ ✅ Yes           │
-│  Managed Cloud          │ ✅ Yes   │ ✅ Yes      │ ✅ Yes           │
-│  Check Language         │ Python   │ UI/SQL      │ SodaCL (YAML)    │
-│  ML Anomaly Detection   │ Limited  │ ✅ Core     │ ✅ Cloud         │
-│  Auto Lineage           │ ❌ No    │ ✅ Yes      │ Limited          │
-│  Root Cause Analysis    │ ❌ No    │ ✅ Yes      │ Limited          │
-│  Schema Monitoring      │ Manual   │ ✅ Auto     │ ✅ Manual        │
-│  Data Profiling         │ ✅ Yes   │ ✅ Yes      │ ✅ Yes           │
-│  Documentation Gen      │ ✅ Yes   │ ❌ No       │ ❌ No            │
-│  Spark Support          │ ✅ Yes   │ ❌ Limited  │ ✅ Yes           │
-│  Local Testing          │ ✅ Easy  │ ❌ Cloud    │ ✅ Easy          │
-│  Learning Curve         │ Medium   │ Easy        │ Easy             │
-│                                                                      │
-│  Pricing (2025):                                                     │
-│  • GX Cloud: Free tier → ~$500/month+                               │
-│  • Monte Carlo: Enterprise only (~$2K+/month)                       │
-│  • Soda Cloud: Free tier → ~$300/month+                             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+| Feature | GX | Monte Carlo | Soda |
+| :--- | :--- | :--- | :--- |
+| **Open Source Core** | ✅ Yes | ❌ No | ✅ Yes |
+| **Managed Cloud** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Check Language** | Python | UI/SQL | SodaCL (YAML) |
+| **ML Anomaly Detection** | Limited | ✅ Core | ✅ Cloud |
+| **Auto Lineage** | ❌ No | ✅ Yes | Limited |
+| **Root Cause Analysis** | ❌ No | ✅ Yes | Limited |
+| **Schema Monitoring** | Manual | ✅ Auto | ✅ Manual |
+| **Data Profiling** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Documentation Gen** | ✅ Yes | ❌ No | ❌ No |
+| **Spark Support** | ✅ Yes | ❌ Limited | ✅ Yes |
+| **Local Testing** | ✅ Easy | ❌ Cloud | ✅ Easy |
+| **Learning Curve** | Medium | Easy | Easy |
+
+*Pricing (2025):*
+* GX Cloud: Free tier → ~$500/month+
+* Monte Carlo: Enterprise only (~$2K+/month)
+* Soda Cloud: Free tier → ~$300/month+
 ```
 
 ---
@@ -777,72 +713,73 @@ Feature Comparison Matrix:
 ### Pattern 1: Testing Before Load
 
 ```
-Pipeline with Pre-Load Validation:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  [Source] ──► [Extract] ──► [Validate (GX/Soda)] ──► [Load]         │
-│                                      │                               │
-│                                      │ Fail?                        │
-│                                      ▼                               │
-│                               [Alert + Block]                        │
-│                                                                      │
-│  Implementation:                                                     │
-│  • Run GX/Soda on staging data                                      │
-│  • Only proceed if validation passes                                │
-│  • Block bad data from entering warehouse                           │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph PRE [" "]
+        direction TB
+        P_TITLE["Pipeline with Pre-Load Validation"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["[Source]"] --> EXT["[Extract]"] --> VAL["[Validate (GX/Soda)]"] --> LD["[Load]"]
+        VAL -->|"Fail?"| ALT["[Alert + Block]"]
+        
+        IMPL["Implementation:<br>• Run GX/Soda on staging data<br>• Only proceed if validation passes<br>• Block bad data from entering warehouse"]
+        style IMPL fill:none,stroke:none,text-align:left
+        
+        ALT ~~~ IMPL
+    end
+```
 ```
 
 ### Pattern 2: Continuous Monitoring
 
 ```
-Observability with Monte Carlo:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  [All Tables in Warehouse] ◄─── [Monte Carlo Monitoring]            │
-│                                      │                               │
-│                    ┌─────────────────┼─────────────────┐            │
-│                    ▼                 ▼                 ▼            │
-│             [Freshness]       [Volume]         [Distribution]       │
-│                    │                 │                 │            │
-│                    └─────────────────┼─────────────────┘            │
-│                                      ▼                               │
-│                              [Anomaly Detected]                      │
-│                                      │                               │
-│                    ┌─────────────────┼─────────────────┐            │
-│                    ▼                 ▼                 ▼            │
-│              [Slack Alert]    [Lineage Impact]  [Root Cause]        │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph OBS [" "]
+        direction TB
+        O_TITLE["Observability with Monte Carlo"]
+        style O_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        AW["[All Tables in Warehouse]"] <--> MC["[Monte Carlo Monitoring]"]
+        
+        subgraph MON [" "]
+            direction LR
+            F["[Freshness]"]
+            V["[Volume]"]
+            D["[Distribution]"]
+        end
+        style MON fill:none,stroke:none
+        
+        MC --> MON
+        MON --> AN["[Anomaly Detected]"]
+        
+        subgraph ACT [" "]
+            direction LR
+            SA["[Slack Alert]"]
+            LI["[Lineage Impact]"]
+            RC["[Root Cause]"]
+        end
+        style ACT fill:none,stroke:none
+        
+        AN --> ACT
+    end
+```
 ```
 
 ### Pattern 3: Layered Quality
 
 ```
-Combined Approach:
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  Layer 1: Source Validation (Soda/GX)                               │
-│  • Schema checks                                                    │
-│  • Basic null/uniqueness                                            │
-│  • Format validation                                                │
-│                                                                      │
-│  Layer 2: Transformation Testing (dbt tests)                        │
-│  • Referential integrity                                            │
-│  • Business logic validation                                        │
-│  • Aggregation checks                                               │
-│                                                                      │
-│  Layer 3: Continuous Monitoring (Monte Carlo)                       │
-│  • Anomaly detection                                                │
-│  • Freshness SLAs                                                   │
-│  • Distribution drift                                               │
-│                                                                      │
-│  Layer 4: Business Validation (Custom)                              │
-│  • KPI reconciliation                                               │
-│  • Cross-system consistency                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+> **Combined Approach: Layered Quality**
+> 
+> * **Layer 1: Source Validation (Soda/GX)**
+>   * Schema checks, basic null/uniqueness, format validation
+> * **Layer 2: Transformation Testing (dbt tests)**
+>   * Referential integrity, business logic validation, aggregation checks
+> * **Layer 3: Continuous Monitoring (Monte Carlo)**
+>   * Anomaly detection, freshness SLAs, distribution drift
+> * **Layer 4: Business Validation (Custom)**
+>   * KPI reconciliation, cross-system consistency
 ```
 
 ---

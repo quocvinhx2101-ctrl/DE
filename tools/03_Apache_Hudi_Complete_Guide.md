@@ -88,134 +88,69 @@ Apache Hudi (Hadoop Upserts Deletes and Incrementals) là một open-source data
 
 ### Tổng Quan Kiến Trúc
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Query Engines                                 │
-│              (Spark, Flink, Presto, Trino, Hive)                     │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Hudi APIs                                    │
-│           (DataSource API, DeltaStreamer, Spark SQL)                 │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Hudi Table Format                               │
-│                                                                      │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                       Timeline                                 │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │  │
-│  │  │commit_1 │►│commit_2 │►│commit_3 │►│commit_4 │   (current)  │  │
-│  │  │10:00:00 │ │10:05:00 │ │10:10:00 │ │10:15:00 │              │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                       Metadata                                 │  │
-│  │  • Table Config                                                │  │
-│  │  • Partition Metadata                                          │  │
-│  │  • File Statistics                                             │  │
-│  │  • Column Statistics                                           │  │
-│  │  • Bloom Filters                                               │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                     Indexes                                    │  │
-│  │  • Bloom Filter Index                                          │  │
-│  │  • Simple Index                                                │  │
-│  │  • Bucket Index                                                │  │
-│  │  • Record-level Index                                          │  │
-│  │  • HBase Index (external)                                      │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Data Files                                    │
-│                                                                      │
-│  my_hudi_table/                                                      │
-│  ├── .hoodie/                                                        │
-│  │   ├── hoodie.properties           (table config)                  │
-│  │   ├── 20240115100000.commit       (completed instant)             │
-│  │   ├── 20240115100500.commit                                       │
-│  │   ├── 20240115101000.inflight     (in-progress)                   │
-│  │   └── archived/                   (old timeline)                  │
-│  ├── date=2024-01-15/                                                │
-│  │   ├── file_group_1/                                               │
-│  │   │   ├── base_file_abc.parquet                                   │
-│  │   │   └── log_file_abc_1.log      (MoR only)                      │
-│  │   └── file_group_2/                                               │
-│  │       └── base_file_def.parquet                                   │
-│  └── date=2024-01-16/                                                │
-│      └── ...                                                         │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Object Storage                                  │
-│                 (S3, GCS, ADLS, HDFS)                                │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    QE["Query Engines<br>(Spark, Flink, Presto, Trino, Hive)"]
+    API["Hudi APIs<br>(DataSource API, DeltaStreamer, Spark SQL)"]
+    
+    subgraph FORMAT [" "]
+        direction TB
+        F_TITLE["Hudi Table Format"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        TIME["Timeline: commit_1 ➔ commit_2 ➔ commit_3 ➔ commit_4"]
+        META["Metadata:<br>• Table Config<br>• Partition Metadata<br>• File Statistics<br>• Column Statistics<br>• Bloom Filters"]
+        INDEX["Indexes:<br>• Bloom Filter<br>• Simple<br>• Bucket<br>• Record-level<br>• HBase (external)"]
+        
+        TIME ~~~ META ~~~ INDEX
+    end
+    
+    DATA["Data Files<br>.hoodie/ (Timeline/Metadata)<br>Partition Directories (Base & Log files)"]
+    OBJ["Object Storage<br>(S3, GCS, ADLS, HDFS)"]
+    
+    QE --> API --> FORMAT --> DATA --> OBJ
 ```
 
 ### Timeline Architecture
 
 Hudi sử dụng **Timeline** để track tất cả actions trên table:
 
-```
-Timeline Concepts:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Instant = (timestamp, action, state)                           │
-│                                                                  │
-│  Actions:                                                        │
-│  ├── COMMITS      - Write operation completed                   │
-│  ├── DELTA_COMMIT - MoR table log file write                    │
-│  ├── CLEANS       - Background cleanup                          │
-│  ├── COMPACTION   - MoR log to base file                        │
-│  ├── ROLLBACK     - Failed commit rollback                      │
-│  ├── SAVEPOINT    - Savepoint for disaster recovery             │
-│  └── REPLACE      - Clustering operation                        │
-│                                                                  │
-│  States:                                                         │
-│  ├── REQUESTED    - Action scheduled                            │
-│  ├── INFLIGHT     - Action in progress                          │
-│  └── COMPLETED    - Action finished                             │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Timeline Concepts**
+> 
+> * **Instant** = (timestamp, action, state)
+> 
+> **Actions:**
+> * `COMMITS` - Write operation completed
+> * `DELTA_COMMIT` - MoR table log file write
+> * `CLEANS` - Background cleanup
+> * `COMPACTION` - MoR log to base file
+> * `ROLLBACK` - Failed commit rollback
+> * `SAVEPOINT` - Savepoint for disaster recovery
+> * `REPLACE` - Clustering operation
+> 
+> **States:**
+> * `REQUESTED` - Action scheduled
+> * `INFLIGHT` - Action in progress
+> * `COMPLETED` - Action finished
 
 ### File Group Concept
 
-```
-File Group = Set of files tracked together
-
-┌─────────────────────────────────────────────────────────────────┐
-│                     File Group Structure                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  File Group ID: fg_001                                          │
-│  Partition: date=2024-01-15                                      │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Base File (Parquet)                                      │   │
-│  │  • base_file_fg001_commit1.parquet                        │   │
-│  │  • Contains full records at commit_1                      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Log Files (Avro) - MoR only                              │   │
-│  │  • .fg001_commit2.log.1  (updates at commit_2)            │   │
-│  │  • .fg001_commit3.log.2  (updates at commit_3)            │   │
-│  │  • Contains delta changes since last base file            │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Compaction merges log files into new base file                 │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph FG [" "]
+        direction TB
+        F_TITLE["File Group Structure (e.g. fg_001)"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        BASE["Base File (Parquet)<br>• base_file_fg001_commit1.parquet<br>• Contains full records at commit_1"]
+        LOG["Log Files (Avro) - MoR only<br>• .fg001_commit2.log.1 (updates at commit_2)<br>• .fg001_commit3.log.2 (updates at commit_3)<br>• Contains delta changes since last base file"]
+        
+        BASE ~~~ LOG
+    end
+    
+    COMP["Compaction merges log files into new base file"]
+    style COMP fill:none,stroke:none,text-align:left
+    FG ~~~ COMP
 ```
 
 ---
@@ -226,21 +161,23 @@ File Group = Set of files tracked together
 
 **Concept:** Mỗi update tạo ra new version của file.
 
-```
-CoW Write Flow:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Original:  [base_file_v1.parquet]                              │
-│             Records: A, B, C, D                                  │
-│                        │                                         │
-│                        │  UPDATE record B                        │
-│                        ▼                                         │
-│  New:       [base_file_v2.parquet]                              │
-│             Records: A, B', C, D  (entire file rewritten)       │
-│                                                                  │
-│  Old file marked for deletion                                    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph COW [" "]
+        direction TB
+        C_TITLE["CoW Write Flow"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        ORIG["Original:<br>[base_file_v1.parquet]<br>Records: A, B, C, D"]
+        UPD["UPDATE record B"]
+        NEW["New:<br>[base_file_v2.parquet]<br>Records: A, B', C, D (entire file rewritten)"]
+        
+        ORIG --> UPD --> NEW
+        
+        DEL["Old file marked for deletion"]
+        style DEL fill:none,stroke:none,text-align:left
+        NEW ~~~ DEL
+    end
 ```
 
 **Characteristics:**
@@ -259,28 +196,33 @@ CoW Write Flow:
 
 **Concept:** Updates ghi vào log files, merge khi read.
 
-```
-MoR Write Flow:
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Base:      [base_file.parquet]                                  │
-│             Records: A, B, C, D                                  │
-│                                                                  │
-│  Update 1:  [log_file.log.1]                                     │
-│             Delta: B -> B'                                       │
-│                                                                  │
-│  Update 2:  [log_file.log.2]                                     │
-│             Delta: D -> D', Insert E                             │
-│                                                                  │
-│  Read Query:                                                     │
-│  ┌────────────┐   ┌────────────┐   ┌────────────┐               │
-│  │ Base File  │ + │  Log 1     │ + │  Log 2     │  = Final View │
-│  └────────────┘   └────────────┘   └────────────┘               │
-│                                                                  │
-│  Compaction (async):                                             │
-│  Base + Logs -> New Base File                                    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph MOR [" "]
+        direction TB
+        M_TITLE["MoR Write Flow"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        BASE["Base:<br>[base_file.parquet]<br>Records: A, B, C, D"]
+        UPD1["Update 1:<br>[log_file.log.1]<br>Delta: B -> B'"]
+        UPD2["Update 2:<br>[log_file.log.2]<br>Delta: D -> D', Insert E"]
+        
+        BASE ~~~ UPD1 ~~~ UPD2
+        
+        subgraph READ [" "]
+            direction LR
+            R1["Base File"]
+            R2["Log 1"]
+            R3["Log 2"]
+            FINAL["Final View"]
+            
+            R1 & R2 & R3 --> FINAL
+        end
+        
+        UPD2 ~~~ READ
+        COMP["Compaction (async):<br>Base + Logs -> New Base File"]
+        READ ~~~ COMP
+    end
 ```
 
 **Characteristics:**
@@ -331,29 +273,24 @@ MoR Write Flow:
 
 ### 1. Bloom Filter Index (Default)
 
-```
-Concept: Probabilistic structure for quick key lookups
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  For each file, maintains bloom filter of record keys           │
-│                                                                  │
-│  Write Flow:                                                     │
-│  1. Compute hash of record key                                  │
-│  2. Check bloom filter: "Could this key be in this file?"       │
-│  3. If NO → skip file                                           │
-│  4. If MAYBE → read file to confirm                             │
-│                                                                  │
-│  Pros:                                                           │
-│  ✅ Low memory footprint                                         │
-│  ✅ Good for high-cardinality keys                               │
-│  ✅ Fast for point lookups                                       │
-│                                                                  │
-│  Cons:                                                           │
-│  ❌ False positives possible                                     │
-│  ❌ Not good for range queries                                   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Concept: Probabilistic structure for quick key lookups**
+>
+> For each file, maintains bloom filter of record keys.
+> 
+> **Write Flow:**
+> 1. Compute hash of record key
+> 2. Check bloom filter: "Could this key be in this file?"
+> 3. If NO → skip file
+> 4. If MAYBE → read file to confirm
+> 
+> **Pros:**
+> ✅ Low memory footprint
+> ✅ Good for high-cardinality keys
+> ✅ Fast for point lookups
+> 
+> **Cons:**
+> ❌ False positives possible
+> ❌ Not good for range queries
 
 **Configuration:**
 ```python
@@ -366,53 +303,41 @@ hoodie_options = {
 
 ### 2. Simple Index
 
-```
-Concept: In-memory join of incoming keys with existing file keys
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Write Flow:                                                     │
-│  1. Read all record keys from existing files                    │
-│  2. Join with incoming records                                  │
-│  3. Determine which files to update                             │
-│                                                                  │
-│  Pros:                                                           │
-│  ✅ 100% accurate (no false positives)                           │
-│  ✅ Good for small datasets                                      │
-│                                                                  │
-│  Cons:                                                           │
-│  ❌ High memory usage                                            │
-│  ❌ Slow for large datasets                                      │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Concept: In-memory join of incoming keys with existing file keys**
+> 
+> **Write Flow:**
+> 1. Read all record keys from existing files
+> 2. Join with incoming records
+> 3. Determine which files to update
+> 
+> **Pros:**
+> ✅ 100% accurate (no false positives)
+> ✅ Good for small datasets
+> 
+> **Cons:**
+> ❌ High memory usage
+> ❌ Slow for large datasets
 
 ### 3. Bucket Index
 
-```
-Concept: Hash record keys to buckets (files)
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  bucket = hash(record_key) % num_buckets                        │
-│                                                                  │
-│  Example (4 buckets):                                            │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Key: user_001 → hash → bucket_2                          │   │
-│  │  Key: user_002 → hash → bucket_0                          │   │
-│  │  Key: user_003 → hash → bucket_2  (same bucket as 001)    │   │
-│  │  Key: user_004 → hash → bucket_3                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Pros:                                                           │
-│  ✅ O(1) lookup - no index structure needed                     │
-│  ✅ Consistent file sizes                                        │
-│  ✅ Perfect for streaming                                        │
-│                                                                  │
-│  Cons:                                                           │
-│  ❌ Bucket count fixed at creation                               │
-│  ❌ Hot spots possible with skewed keys                          │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Concept: Hash record keys to buckets (files)**
+> 
+> `bucket = hash(record_key) % num_buckets`
+> 
+> **Example (4 buckets):**
+> * Key: user_001 → hash → bucket_2
+> * Key: user_002 → hash → bucket_0
+> * Key: user_003 → hash → bucket_2 (same bucket as 001)
+> * Key: user_004 → hash → bucket_3
+> 
+> **Pros:**
+> ✅ O(1) lookup - no index structure needed
+> ✅ Consistent file sizes
+> ✅ Perfect for streaming
+> 
+> **Cons:**
+> ❌ Bucket count fixed at creation
+> ❌ Hot spots possible with skewed keys
 
 **Configuration:**
 ```python
@@ -424,30 +349,24 @@ hoodie_options = {
 
 ### 4. Record-level Index (New in 1.0+)
 
-```
-Concept: Dedicated index table mapping record keys to file locations
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│  Record Index Table:                                             │
-│  ┌────────────────────────────────────────────────────────┐     │
-│  │  record_key  │  file_id       │  partition           │     │
-│  │─────────────────────────────────────────────────────────│     │
-│  │  user_001    │  file_group_1  │  date=2024-01-15     │     │
-│  │  user_002    │  file_group_2  │  date=2024-01-15     │     │
-│  │  user_003    │  file_group_1  │  date=2024-01-16     │     │
-│  └────────────────────────────────────────────────────────┘     │
-│                                                                  │
-│  Pros:                                                           │
-│  ✅ O(1) exact lookup                                            │
-│  ✅ Supports all operations efficiently                          │
-│  ✅ Scales to billions of records                                │
-│                                                                  │
-│  Cons:                                                           │
-│  ❌ Additional storage for index                                 │
-│  ❌ Index maintenance overhead                                   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Concept: Dedicated index table mapping record keys to file locations**
+> 
+> **Record Index Table:**
+> 
+> | record_key | file_id | partition |
+> |---|---|---|
+> | user_001 | file_group_1 | date=2024-01-15 |
+> | user_002 | file_group_2 | date=2024-01-15 |
+> | user_003 | file_group_1 | date=2024-01-16 |
+> 
+> **Pros:**
+> ✅ O(1) exact lookup
+> ✅ Supports all operations efficiently
+> ✅ Scales to billions of records
+> 
+> **Cons:**
+> ❌ Additional storage for index
+> ❌ Index maintenance overhead
 
 ---
 
@@ -716,55 +635,49 @@ SELECT * FROM kafka_events;
 
 ### 1. Uber - Original Use Case
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Uber Data Platform                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   Mobile Apps ──► Kafka ──► Hudi Tables                         │
-│                                    │                             │
-│                    ┌───────────────┴───────────────┐             │
-│                    ▼                               ▼             │
-│             ┌────────────┐                 ┌────────────┐        │
-│             │  trips     │                 │  users     │        │
-│             │  (updates) │                 │  (GDPR)    │        │
-│             └────────────┘                 └────────────┘        │
-│                                                                  │
-│   Challenges Solved:                                             │
-│   • Billions of trip updates daily                              │
-│   • GDPR delete requests                                        │
-│   • Late-arriving data                                          │
-│   • Incremental ETL pipelines                                   │
-│                                                                  │
-│   Scale:                                                         │
-│   • 100+ PB of data                                             │
-│   • 1M+ events/second ingestion                                 │
-│   • 10x faster pipeline processing                              │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph UBER [" "]
+        direction TB
+        U_TITLE["Uber Data Platform"]
+        style U_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SRC["Mobile Apps"] --> KAFKA["Kafka"] --> HUDI["Hudi Tables"]
+        
+        subgraph TABLES [" "]
+            direction LR
+            T1["trips (updates)"]
+            T2["users (GDPR)"]
+        end
+        
+        HUDI --> TABLES
+    end
+    
+    CHAL["Challenges Solved:<br>• Billions of trip updates daily<br>• GDPR delete requests<br>• Late-arriving data<br>• Incremental ETL pipelines"]
+    SCALE["Scale:<br>• 100+ PB of data<br>• 1M+ events/second ingestion<br>• 10x faster pipeline processing"]
+    style CHAL fill:none,stroke:none,text-align:left
+    style SCALE fill:none,stroke:none,text-align:left
+    
+    UBER ~~~ CHAL ~~~ SCALE
 ```
 
 ### 2. CDC Pipeline
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     CDC with Hudi                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   MySQL ──► Debezium ──► Kafka ──► DeltaStreamer ──► Hudi       │
-│                                                                  │
-│   DeltaStreamer handles:                                         │
-│   • Automatic upserts (INSERT/UPDATE)                           │
-│   • Deletes (when delete events received)                       │
-│   • Schema evolution                                            │
-│   • Exactly-once guarantees                                     │
-│                                                                  │
-│   Downstream:                                                    │
-│   Hudi ──► Incremental Query ──► Data Warehouse                 │
-│        ──► Time Travel ──► Audit/Compliance                     │
-│        ──► Analytics ──► BI Tools                               │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CDC [" "]
+        direction TB
+        C_TITLE["CDC with Hudi"]
+        style C_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        FLOW["MySQL ──► Debezium ──► Kafka ──► DeltaStreamer ──► Hudi"]
+        
+        DS["DeltaStreamer handles:<br>• Automatic upserts (INSERT/UPDATE)<br>• Deletes<br>• Schema evolution<br>• Exactly-once guarantees"]
+        
+        DOWN["Downstream:<br>Hudi ──► Incremental Query ──► Data Warehouse<br>Hudi ──► Time Travel ──► Audit/Compliance<br>Hudi ──► Analytics ──► BI Tools"]
+        
+        FLOW ~~~ DS ~~~ DOWN
+    end
 ```
 
 ### 3. Near Real-Time Analytics

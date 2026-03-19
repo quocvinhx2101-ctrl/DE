@@ -56,37 +56,29 @@
 
 **Architecture:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Sales Channels                            │
-├──────────────┬──────────────┬──────────────┬────────────────┤
-│   Shopify    │    Amazon    │   WooCommerce │   Faire/Etsy  │
-│   (API)      │   (Seller)   │    (REST)     │    (API)      │
-└──────┬───────┴──────┬───────┴──────┬────────┴───────┬───────┘
-       │              │              │                │
-       ▼              ▼              ▼                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Airbyte (Self-hosted)                       │
-│             or Fivetran (Managed - $500/mo)                  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    PostgreSQL / BigQuery                     │
-│                      Raw Layer (Sources)                     │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                         dbt                                  │
-│            Staging → Intermediate → Marts                    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Metabase / Preset                         │
-│                   Sales Dashboards                           │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ECOMMERCE [" "]
+        direction TB
+        
+        subgraph CHANNELS ["Sales Channels"]
+            direction LR
+            S["Shopify<br>(API)"]
+            A["Amazon<br>(Seller)"]
+            W["WooCommerce<br>(REST)"]
+            F["Faire/Etsy<br>(API)"]
+        end
+        
+        ING["Airbyte (Self-hosted)<br>or Fivetran (Managed - $500/mo)"]
+        WH["PostgreSQL / BigQuery<br>Raw Layer (Sources)"]
+        DBT["dbt<br>Staging → Intermediate → Marts"]
+        BI["Metabase / Preset<br>Sales Dashboards"]
+        
+        CHANNELS --> ING
+        ING --> WH
+        WH --> DBT
+        DBT --> BI
+    end
 ```
 
 **Step 1: Data Ingestion Setup**

@@ -6,24 +6,16 @@
 
 ## 📊 Career Levels Overview
 
-```
-                        DATA ENGINEERING CAREER PATH
+**DATA ENGINEERING CAREER PATH**
 
-Level           Years     Focus                      Impact
-+------------+---------+-------------------------+------------------+
-| Beginner   | 0-1     | Learn fundamentals      | Individual tasks |
-+------------+---------+-------------------------+------------------+
-| Junior     | 1-2     | Build with guidance     | Feature level    |
-+------------+---------+-------------------------+------------------+
-| Mid        | 2-4     | Independent delivery    | Project level    |
-+------------+---------+-------------------------+------------------+
-| Senior     | 4-7     | Lead and mentor         | Team level       |
-+------------+---------+-------------------------+------------------+
-| Staff      | 7-10    | Technical strategy      | Org level        |
-+------------+---------+-------------------------+------------------+
-| Principal  | 10+     | Industry leadership     | Company level    |
-+------------+---------+-------------------------+------------------+
-```
+| Level | Years | Focus | Impact |
+|---|---|---|---|
+| Beginner | 0-1 | Learn fundamentals | Individual tasks |
+| Junior | 1-2 | Build with guidance | Feature level |
+| Mid | 2-4 | Independent delivery | Project level |
+| Senior | 4-7 | Lead and mentor | Team level |
+| Staff | 7-10 | Technical strategy | Org level |
+| Principal | 10+ | Industry leadership | Company level |
 
 ---
 

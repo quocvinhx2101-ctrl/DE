@@ -27,22 +27,31 @@ Trước khi đi vào roadmap, tôi muốn chia sẻ vài điều thực tế:
 
 ---
 
-## 🗺️ Repository Này Có Gì (104 Files)
+## 🗺️ Repository Này Có Gì (~114 Files)
 
 ```mermaid
 flowchart LR
     Repo[Fun Repository]
+    Repo --> A[architecture 3]
     Repo --> B[business 8]
-    Repo --> F[fundamentals 20]
-    Repo --> T[tools 17]
+    Repo --> F[fundamentals 29]
+    Repo --> T[tools 20]
     Repo --> U[usecases 12]
     Repo --> P[papers 10]
-    Repo --> PR[projects 6]
-    Repo --> I[interview 5]
+    Repo --> PR[projects 8]
+    Repo --> I[interview 6]
     Repo --> R[roadmap 5]
     Repo --> PL[platforms 5]
-    Repo --> M[mindset 4]
+    Repo --> M[mindset 6]
 ```
+
+### 🏛️ architecture/ (3 files) - Patterns & Blueprints
+
+| # | File | Focus |
+|---|------|-------|
+| 01 | [01_Startup_Stack](architecture/01_Startup_Stack.md) | 0-1TB Scale |
+| 02 | [02_Scaleup_Stack](architecture/02_Scaleup_Stack.md) | Lakehouse Scale |
+| 03 | [03_Enterprise_Stack](architecture/03_Enterprise_Stack.md) | Data Mesh Scale |
 
 ### 💼 business/ (8 files) - IMPACT TRƯỚC, TOOLS SAU ⭐⭐⭐
 
@@ -73,7 +82,7 @@ flowchart TB
 | 08 | [08_Anti_Patterns_Value_Destruction](business/08_Anti_Patterns_Value_Destruction.md) | Những việc phá hủy giá trị - **ĐỌC TRƯỚC** | ⭐⭐⭐ |
 
 
-### 📁 fundamentals/ (20 files) - Nền Tảng Bắt Buộc
+### 📁 fundamentals/ (29 files) - Nền Tảng Bắt Buộc
 
 | # | File | Nội dung | Khi nào học |
 |---|------|----------|-------------|
@@ -97,8 +106,17 @@ flowchart TB
 | 18 | [18_OOP_Design_Patterns](fundamentals/18_OOP_Design_Patterns.md) | 4 Pillars, SOLID, Factory/Strategy/Builder | Y1 Q1 ⭐ |
 | 19 | [19_DSA_For_Data_Engineering](fundamentals/19_DSA_For_Data_Engineering.md) | Hash tables, Heaps, Bloom filters, Big-O | Y1 Q1 ⭐ |
 | 20 | [20_Networking_Protocols](fundamentals/20_Networking_Protocols.md) | HTTP/REST, TCP, DNS, VPC, Connection pooling | Y1 Q3 |
+| 21 | [21_Debugging_Troubleshooting](fundamentals/21_Debugging_Troubleshooting.md) | Troubleshooting techniques | Y2 |
+| 22 | [22_Schema_Evolution_Migration](fundamentals/22_Schema_Evolution_Migration.md) | Safe migrations | Y2 |
+| 23 | [23_Data_Mesh_Data_Products](fundamentals/23_Data_Mesh_Data_Products.md) | Domain-driven data | Y3 Q4 |
+| 24 | [24_Data_Contracts](fundamentals/24_Data_Contracts.md) | API-like data guarantees | Y3 Q4 |
+| 25 | [25_Reverse_ETL](fundamentals/25_Reverse_ETL.md) | Sync to business apps | Y2 |
+| 26 | [26_Data_Testing_Patterns](fundamentals/26_Data_Testing_Patterns.md) | Advanced testing | Y3 |
+| 27 | [27_SQL_Compiler_AST](fundamentals/27_SQL_Compiler_AST.md) | CS Core: Internals | Y3 |
+| 28 | [28_Memory_Layout_Apache_Arrow](fundamentals/28_Memory_Layout_Apache_Arrow.md) | CS Core: Vectors | Y3 |
+| 29 | [29_Probabilistic_Data_Structures](fundamentals/29_Probabilistic_Data_Structures.md) | CS Core: Bloom filters | Y3 |
 
-### 🔧 tools/ (17 files) - SOTA Tools 2025
+### 🔧 tools/ (20 files) - SOTA Tools 2025
 
 ```mermaid
 flowchart TB
@@ -142,6 +160,8 @@ flowchart TB
 | 15 | [15_Fivetran_Airbyte_Guide](tools/15_Fivetran_Airbyte_Guide.md) | Data ingestion | Y1 Q4 |
 | 16 | [16_Observability_Monitoring_Tools](tools/16_Observability_Monitoring_Tools.md) | OpenTelemetry, Metrics | Y2 Q4 |
 | 17 | [17_Modern_Alternatives](tools/17_Modern_Alternatives.md) | Dagster, Mage.ai, etc | Y2+ |
+| 18 | [18_Terraform_IaC_for_DE](tools/18_Terraform_IaC_for_DE.md) | Infrastructure as Code | Y2+ |
+| 19 | [19_GenAI_for_DE](tools/19_GenAI_for_DE.md) | LLMs, Vector DBs | Y3 |
 
 ### 🏢 usecases/ (12 files) - Real-world Case Studies
 
@@ -154,10 +174,16 @@ flowchart LR
     Big --> Netflix
     Big --> Uber
     Big --> Airbnb
+    Big --> LinkedIn
+    Big --> Spotify
+    Big --> Meta
     
     SME --> Startup
     SME --> Ecommerce
+    SME --> SaaS
     SME --> Fintech
+    SME --> Healthcare
+    SME --> Manufacturing
 ```
 
 | # | File | Company/Type | What They Created |
@@ -190,7 +216,7 @@ flowchart LR
 | 09 | [09_Query_Optimization_Papers](papers/09_Query_Optimization_Papers.md) | Calcite, Cascades, CBO |
 | 10 | [10_Serialization_Format_Papers](papers/10_Serialization_Format_Papers.md) | Parquet, Arrow, Avro |
 
-### 💼 projects/ (6 files) - Hands-on Projects
+### 💼 projects/ (8 files) - Hands-on Projects
 
 ```mermaid
 flowchart LR
@@ -205,6 +231,8 @@ flowchart LR
     A --> Platform[Data Platform]
     A --> ML[ML Pipeline]
     A --> CDC[CDC Pipeline]
+    A --> Debug[Debug Pipeline]
+    A --> Legacy[Legacy Migration]
 ```
 
 | # | File | Difficulty | Technologies |
@@ -215,8 +243,10 @@ flowchart LR
 | 04 | [04_Data_Platform](projects/04_Data_Platform.md) | Advanced | Kafka, Spark, Iceberg |
 | 05 | [05_ML_Pipeline](projects/05_ML_Pipeline.md) | Advanced | Feature store, MLflow |
 | 06 | [06_CDC_Pipeline](projects/06_CDC_Pipeline.md) | Advanced | Debezium, Kafka, Flink |
+| 07 | [07_Debug_Production_Pipeline](projects/07_Debug_Production_Pipeline.md) | Advanced | Troubleshooting, Resolving |
+| 08 | [08_Legacy_Migration](projects/08_Legacy_Migration.md) | Advanced | Migration to Lakehouse |
 
-### 🎤 interview/ (5 files) - Interview Preparation
+### 🎤 interview/ (6 files) - Interview Preparation
 
 | # | File | Focus |
 |---|------|-------|
@@ -224,6 +254,7 @@ flowchart LR
 | 02 | [02_SQL_Deep_Dive](interview/02_SQL_Deep_Dive.md) | Complex SQL, patterns |
 | 03 | [03_System_Design](interview/03_System_Design.md) | Architecture, trade-offs |
 | 04 | [04_Behavioral_Questions](interview/04_Behavioral_Questions.md) | STAR method, stories |
+| 04B | [04B_Behavioral_Questions_Intern](interview/04B_Behavioral_Questions_Intern.md) | Intern focus |
 | 05 | [05_Coding_Test_DE](interview/05_Coding_Test_DE.md) | Python challenges |
 
 ### 📈 roadmap/ (5 files) - Career Guidance
@@ -246,7 +277,7 @@ flowchart LR
 | 04 | [04_Redshift](platforms/04_Redshift.md) | Redshift | AWS ecosystem |
 | 05 | [05_Azure_Synapse](platforms/05_Azure_Synapse.md) | Synapse | Azure ecosystem |
 
-### 🧠 mindset/ (4 files) - Soft Skills
+### 🧠 mindset/ (6 files) - Soft Skills
 
 | # | File | Focus |
 |---|------|-------|
@@ -254,6 +285,8 @@ flowchart LR
 | 02 | [02_Architectural_Thinking](mindset/02_Architectural_Thinking.md) | System thinking |
 | 03 | [03_Problem_Solving](mindset/03_Problem_Solving.md) | Debug strategies |
 | 04 | [04_Career_Growth](mindset/04_Career_Growth.md) | Senior → Staff path |
+| 05 | [05_Day2_Operations](mindset/05_Day2_Operations.md) | Maintenance, Ops |
+| 06 | [06_Tech_Leadership](mindset/06_Tech_Leadership.md) | Mentoring, Leading |
 
 ---
 
@@ -1371,21 +1404,27 @@ Example: Spark optimization
 - 99.9% availability
 
 **High-level design:**
-```
-Web/Mobile Events
-    ↓
-Kafka (event streaming)
-    ↓
-┌─────────────────────────────┐
-│ Flink (real-time aggregation)│
-└─────────────────────────────┘
-    ↓
-Druid (real-time OLAP)
-    ↓
-Real-time Dashboard
+```mermaid
+flowchart TB
+    EVENTS["Web/Mobile Events"]
+    KAFKA["Kafka (event streaming)"]
+    FLINK["Flink (real-time aggregation)"]
+    DRUID["Druid (real-time OLAP)"]
+    RT_DASH["Real-time Dashboard"]
 
---- Historical path ---
-Kafka → Spark (hourly batch) → Iceberg → Trino → BI Dashboard
+    EVENTS --> KAFKA
+    KAFKA --> FLINK
+    FLINK --> DRUID
+    DRUID --> RT_DASH
+    
+    SPARK["Spark (hourly batch)"]
+    ICE["Iceberg"]
+    TRINO["Trino"]
+    BI["BI Dashboard"]
+    
+    KAFKA -->|"--- Historical path ---"| SPARK --> ICE --> TRINO --> BI
+    
+    style FLINK stroke-width:2px,stroke:#333
 ```
 
 **Components rationale:**
@@ -1671,26 +1710,43 @@ SELECT * FROM final
 
 ### Architecture
 
-```
-Event Generator (Python)
-    ↓
-Kafka (event streaming)
-    ↓
-┌────────────────────────────┐
-│ Flink (stream processing)  │
-│ - Aggregations             │
-│ - Windowing                │
-│ - State management         │
-└────────────────────────────┘
-    ↓
-┌────────────────────────────┐
-│ Dual write:                │
-│ - Druid (real-time OLAP)   │
-│ - Iceberg (historical)     │
-└────────────────────────────┘
-    ↓
-Grafana Dashboard (real-time)
-REST API (historical queries)
+```mermaid
+flowchart TB
+    GEN["Event Generator (Python)"]
+    KAFKA["Kafka (event streaming)"]
+    
+    subgraph FLINK [" "]
+        direction TB
+        F_TITLE["Flink (stream processing)"]
+        style F_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        F_DESC["- Aggregations<br>- Windowing<br>- State management"]
+        F_TITLE ~~~ F_DESC
+    end
+    
+    GEN --> KAFKA --> FLINK
+    
+    subgraph DUAL_WRITE [" "]
+        direction TB
+        D_TITLE["Dual write:"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph ENGINES [" "]
+            direction LR
+            DRUID["Druid (real-time OLAP)"]
+            ICE["Iceberg (historical)"]
+        end
+        D_TITLE ~~~ ENGINES
+    end
+    
+    style ENGINES fill:none,stroke:none
+    
+    FLINK --> DUAL_WRITE
+    
+    GRAFANA["Grafana Dashboard (real-time)"]
+    API["REST API (historical queries)"]
+    
+    DRUID --> GRAFANA
+    ICE --> API
 ```
 
 ### Kafka Producer Example

@@ -84,48 +84,47 @@ graph TD
 
 **Origin:** Uber tạo ra để giải quyết incremental data processing
 
-```
-HUDI TABLE ARCHITECTURE:
-
-┌──────────────────────────────────────────────┐
-│              HUDI TABLE                       │
-│                                               │
-│  ┌─────────────────────────────────────────┐ │
-│  │            Timeline                      │ │
-│  │  Commit1 -> Commit2 -> Commit3 -> ...   │ │
-│  └─────────────────────────────────────────┘ │
-│                                               │
-│  ┌─────────────────────────────────────────┐ │
-│  │         File Groups                      │ │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐   │ │
-│  │  │ FG1     │ │ FG2     │ │ FG3     │   │ │
-│  │  │ base +  │ │ base +  │ │ base +  │   │ │
-│  │  │ logs    │ │ logs    │ │ logs    │   │ │
-│  │  └─────────┘ └─────────┘ └─────────┘   │ │
-│  └─────────────────────────────────────────┘ │
-│                                               │
-│  Table Types:                                 │
-│  - Copy-on-Write: merge on write             │
-│  - Merge-on-Read: merge on query             │
-└──────────────────────────────────────────────┘
-
-
-INCREMENTAL PROCESSING:
-
-Traditional:
-Full table scan daily -> Hours of processing
-
-With Hudi:
-Only changed records -> Minutes of processing
-
-Pipeline:
-┌───────────┐     ┌───────────┐     ┌───────────┐
-│ Raw Data  │────>│ Bronze    │────>│ Silver    │
-│ (Kafka)   │     │ (Hudi)    │     │ (Hudi)    │
-└───────────┘     └───────────┘     └───────────┘
-     │                  │                  │
-     │    Incremental   │    Incremental   │
-     └──────────────────┴──────────────────┘
+```mermaid
+flowchart TD
+    %% HUDI TABLE ARCHITECTURE
+    subgraph HUDI ["HUDI TABLE ARCHITECTURE"]
+        direction TB
+        subgraph TL ["Timeline"]
+            C1["Commit1"] --> C2["Commit2"] --> C3["Commit3"] --> C4["..."]
+        end
+        style TL fill:none,stroke:#333
+        
+        subgraph FG ["File Groups"]
+            direction LR
+            FG1["FG1<br>base + logs"]
+            FG2["FG2<br>base + logs"]
+            FG3["FG3<br>base + logs"]
+        end
+        style FG fill:none,stroke:#333
+        
+        TT["Table Types:<br>- Copy-on-Write: merge on write<br>- Merge-on-Read: merge on query"]
+        style TT fill:none,stroke:none,text-align:left
+        
+        TL ~~~ FG ~~~ TT
+    end
+    
+    %% INCREMENTAL PROCESSING
+    subgraph INC ["INCREMENTAL PROCESSING"]
+        direction TB
+        INFO["Traditional:<br>Full table scan daily -> Hours of processing<br><br>With Hudi:<br>Only changed records -> Minutes of processing"]
+        style INFO fill:none,stroke:none,text-align:left
+        
+        subgraph PIPE ["Pipeline"]
+            direction LR
+            RD["Raw Data<br>(Kafka)"] -->|"Incremental"| B["Bronze<br>(Hudi)"]
+            B -->|"Incremental"| S["Silver<br>(Hudi)"]
+        end
+        style PIPE fill:none,stroke:none
+        
+        INFO ~~~ PIPE
+    end
+    
+    HUDI ~~~ INC
 ```
 
 **Use cases at Uber:**
@@ -138,140 +137,125 @@ Pipeline:
 
 **Origin:** LinkedIn created, Uber heavily uses
 
+```mermaid
+flowchart TD
+    subgraph PINOT [" "]
+        direction TB
+        P_TITLE["PINOT ARCHITECTURE AT UBER"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CLUSTER ["PINOT CLUSTER"]
+            direction TB
+            CTL["Controller<br>(Cluster mgmt)"]
+            BRK["Broker<br>(Query route)"]
+            
+            subgraph SRV ["Servers"]
+                direction LR
+                S1["Server 1<br>(Data)"]
+                SN["Server N<br>(Data)"]
+            end
+            
+            CTL ~~~ BRK
+            BRK --> SRV
+        end
+        
+        DS["Data Sources:<br>├── Kafka (real-time)<br>└── HDFS/S3 (batch)"]
+        style DS fill:none,stroke:none,text-align:left
+        
+        CLUSTER ~~~ DS
+    end
 ```
-PINOT ARCHITECTURE AT UBER:
 
-┌──────────────────────────────────────────────┐
-│              PINOT CLUSTER                    │
-│                                               │
-│  ┌───────────────┐     ┌───────────────┐    │
-│  │ Controller    │     │ Broker        │    │
-│  │ (Cluster mgmt)│     │ (Query route) │    │
-│  └───────────────┘     └───────┬───────┘    │
-│                                │             │
-│                    ┌───────────┴───────────┐│
-│                    │                       ││
-│               ┌────v────┐           ┌────v────┐
-│               │ Server 1│           │ Server N│
-│               │ (Data)  │           │ (Data)  │
-│               └─────────┘           └─────────┘
-│                                               │
-│  Data Sources:                                │
-│  ├── Kafka (real-time)                       │
-│  └── HDFS/S3 (batch)                         │
-└──────────────────────────────────────────────┘
-
-
-REAL-TIME USE CASES:
-
-1. Operations Dashboard:
-   - Live trip counts
-   - Active drivers per city
-   - Current surge areas
-
-2. Business Metrics:
-   - Revenue per hour
-   - Trips per market
-   - Cancellation rates
-
-Query latency: p99 < 100ms
-```
+> **REAL-TIME USE CASES:**
+> 
+> 1. Operations Dashboard:
+>    - Live trip counts
+>    - Active drivers per city
+>    - Current surge areas
+> 
+> 2. Business Metrics:
+>    - Revenue per hour
+>    - Trips per market
+>    - Cancellation rates
+> 
+> *Query latency: p99 < 100ms*
 
 ### 3. Michelangelo (ML Platform)
 
+```mermaid
+flowchart TD
+    subgraph MICH [" "]
+        direction TB
+        M_TITLE["MICHELANGELO ARCHITECTURE"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph CORE [" "]
+            direction LR
+            FS["Feature Store"] --> MT["Model<br>Training"] --> MR["Model<br>Registry"]
+        end
+        style CORE fill:none,stroke:none
+        
+        subgraph FP ["Feature Pipeline"]
+            direction LR
+            B["Batch<br>(Spark)"]
+            RT["Real-time<br>(Flink)"]
+            S["Streaming<br>(Kafka)"]
+        end
+        
+        subgraph MS ["Model Serving"]
+            direction LR
+            ON["Online (RT)<br>- ETA<br>- Surge<br>- Fraud"]
+            BP["Batch Prediction<br>- Churn prediction<br>- Driver incentives"]
+        end
+        
+        CORE --> FP
+        FP --> MS
+    end
 ```
-MICHELANGELO ARCHITECTURE:
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    MICHELANGELO                                  │
-│                                                                  │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐    │
-│  │ Feature Store│     │ Model        │     │ Model        │    │
-│  │              │────>│ Training     │────>│ Registry     │    │
-│  └──────────────┘     └──────────────┘     └──────────────┘    │
-│         │                    │                    │             │
-│         │                    │                    │             │
-│  ┌──────v───────────────────v────────────────────v──────────┐  │
-│  │                   Feature Pipeline                        │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐                │  │
-│  │  │ Batch    │  │ Real-time│  │ Streaming│                │  │
-│  │  │ (Spark)  │  │ (Flink)  │  │ (Kafka)  │                │  │
-│  │  └──────────┘  └──────────┘  └──────────┘                │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              │                                  │
-│                              v                                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                   Model Serving                           │  │
-│  │  ┌────────────────┐  ┌────────────────────────────────┐  │  │
-│  │  │ Online (RT)    │  │ Batch Prediction               │  │  │
-│  │  │ - ETA          │  │ - Churn prediction             │  │  │
-│  │  │ - Surge        │  │ - Driver incentives            │  │  │
-│  │  │ - Fraud        │  │                                │  │  │
-│  │  └────────────────┘  └────────────────────────────────┘  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-
-
-KEY ML MODELS:
-
-1. ETA Prediction:
-   - Input: pickup, dropoff, time, weather, traffic
-   - Output: estimated arrival time
-   - Latency: < 50ms
-   - Updates: Real-time traffic features
-
-2. Dynamic Pricing:
-   - Input: demand, supply, historical patterns
-   - Output: surge multiplier
-   - Requirement: Fair, explainable
-
-3. Fraud Detection:
-   - Input: transaction patterns, device info
-   - Output: fraud probability
-   - Constraint: Low false positives
-
-4. Driver-Rider Matching:
-   - Input: locations, ratings, preferences
-   - Output: optimal assignment
-   - Optimization: Minimize total wait time
-```
+> **KEY ML MODELS:**
+> 
+> 1. ETA Prediction:
+>    - Input: pickup, dropoff, time, weather, traffic
+>    - Output: estimated arrival time
+>    - Latency: < 50ms
+>    - Updates: Real-time traffic features
+> 
+> 2. Dynamic Pricing:
+>    - Input: demand, supply, historical patterns
+>    - Output: surge multiplier
+>    - Requirement: Fair, explainable
+> 
+> 3. Fraud Detection:
+>    - Input: transaction patterns, device info
+>    - Output: fraud probability
+>    - Constraint: Low false positives
+> 
+> 4. Driver-Rider Matching:
+>    - Input: locations, ratings, preferences
+>    - Output: optimal assignment
+>    - Optimization: Minimize total wait time
 
 ### 4. Data Quality (Uber's Approach)
 
-```
-DATA QUALITY PIPELINE:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    UBER DATA QUALITY                             │
-│                                                                  │
-│  Raw Data                                                        │
-│     │                                                            │
-│     v                                                            │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │ Schema Validation                                         │   │
-│  │ - Required fields present                                 │   │
-│  │ - Types correct                                           │   │
-│  └────────────────────────┬─────────────────────────────────┘   │
-│                           │                                      │
-│                           v                                      │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │ Semantic Validation                                       │   │
-│  │ - Business rules (fare > 0, distance > 0)                │   │
-│  │ - Referential integrity                                   │   │
-│  └────────────────────────┬─────────────────────────────────┘   │
-│                           │                                      │
-│                           v                                      │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │ Statistical Validation                                    │   │
-│  │ - Drift detection                                         │   │
-│  │ - Outlier detection                                       │   │
-│  │ - Volume anomalies                                        │   │
-│  └────────────────────────┬─────────────────────────────────┘   │
-│                           │                                      │
-│                           v                                      │
-│                    Quality Score                                 │
-│                    (Metadata)                                    │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph DQ [" "]
+        direction TB
+        D_TITLE["UBER DATA QUALITY PIPELINE"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        RAW["Raw Data"]
+        SV1["Schema Validation<br>- Required fields present<br>- Types correct"]
+        SV2["Semantic Validation<br>- Business rules (fare > 0, etc.)<br>- Referential integrity"]
+        SV3["Statistical Validation<br>- Drift detection<br>- Outlier detection<br>- Volume anomalies"]
+        QS["Quality Score<br>(Metadata)"]
+        
+        RAW --> SV1
+        SV1 --> SV2
+        SV2 --> SV3
+        SV3 --> QS
+    end
 ```
 
 ---
@@ -288,39 +272,33 @@ DATA QUALITY PIPELINE:
 
 **HOW - Implementation:**
 
-```
-SURGE PRICING SYSTEM:
-
-┌───────────────┐     ┌───────────────┐
-│ Demand Signal │     │ Supply Signal │
-│ (Trip requests)│     │ (Active drivers)│
-└───────┬───────┘     └───────┬───────┘
-        │                     │
-        └─────────┬───────────┘
-                  │
-                  v
-        ┌─────────────────┐
-        │ Geospatial      │
-        │ Aggregation     │
-        │ (H3 hexagons)   │
-        └────────┬────────┘
-                 │
-                 v
-        ┌─────────────────┐
-        │ ML Model        │
-        │ (Surge calc)    │
-        └────────┬────────┘
-                 │
-                 v
-        ┌─────────────────┐
-        │ Price Service   │
-        └─────────────────┘
-
-H3 Geospatial Index:
-- Uber uses H3 for geospatial
-- Hexagonal grid system
-- Consistent area coverage
-- Open sourced: https://h3geo.org/
+```mermaid
+flowchart TD
+    subgraph SURGE [" "]
+        direction TB
+        S_TITLE["SURGE PRICING SYSTEM"]
+        style S_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph SIG [" "]
+            direction LR
+            DS["Demand Signal<br>(Trip requests)"]
+            SS["Supply Signal<br>(Active drivers)"]
+        end
+        style SIG fill:none,stroke:none
+        
+        GA["Geospatial<br>Aggregation<br>(H3 hexagons)"]
+        ML["ML Model<br>(Surge calc)"]
+        PS["Price Service"]
+        
+        SIG --> GA
+        GA --> ML
+        ML --> PS
+        
+        H3["H3 Geospatial Index:<br>- Uber uses H3 for geospatial<br>- Hexagonal grid system<br>- Consistent area coverage<br>- Open sourced: https://h3geo.org/"]
+        style H3 fill:none,stroke:none,text-align:left
+        
+        PS ~~~ H3
+    end
 ```
 
 **WHY - Lý do & Impact:**
@@ -341,38 +319,28 @@ H3 Geospatial Index:
 
 **HOW - Implementation:**
 
-```
-ETA PIPELINE:
-
-Historical Data                    Real-time Data
-      │                                  │
-      v                                  v
-┌────────────┐                    ┌────────────┐
-│ Historical │                    │ Live       │
-│ Trip Times │                    │ Traffic    │
-└─────┬──────┘                    └─────┬──────┘
-      │                                 │
-      └─────────────┬───────────────────┘
-                    │
-                    v
-           ┌───────────────┐
-           │ Feature       │
-           │ Engineering   │
-           │ - Road segments│
-           │ - Time of day │
-           │ - Weather     │
-           └───────┬───────┘
-                   │
-                   v
-           ┌───────────────┐
-           │ DeepETA Model │
-           │ (Graph Neural │
-           │  Network)     │
-           └───────┬───────┘
-                   │
-                   v
-              Prediction
-              (minutes)
+```mermaid
+flowchart TD
+    subgraph ETA [" "]
+        direction TB
+        E_TITLE["ETA PIPELINE"]
+        style E_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        subgraph DATA [" "]
+            direction LR
+            HD["Historical<br>Trip Times"]
+            LT["Live<br>Traffic"]
+        end
+        style DATA fill:none,stroke:none
+        
+        FE["Feature<br>Engineering<br>- Road segments<br>- Time of day<br>- Weather"]
+        MOD["DeepETA Model<br>(Graph Neural<br>Network)"]
+        PRED["Prediction<br>(minutes)"]
+        
+        DATA --> FE
+        FE --> MOD
+        MOD --> PRED
+    end
 ```
 
 **WHY - Lý do & Impact:**
@@ -393,34 +361,24 @@ Historical Data                    Real-time Data
 
 **HOW - Implementation:**
 
-```
-MATCHING ALGORITHM:
-
-Request comes in:
-     │
-     v
-┌────────────────────────────────────┐
-│ Available Drivers Query            │
-│ (Geospatial + Filters)             │
-└─────────────────┬──────────────────┘
-                  │
-                  v
-┌────────────────────────────────────┐
-│ Scoring (for each candidate)       │
-│ - ETA to pickup                    │
-│ - Driver rating                    │
-│ - Rider preferences                │
-│ - Fairness constraints             │
-└─────────────────┬──────────────────┘
-                  │
-                  v
-┌────────────────────────────────────┐
-│ Batched Matching                   │
-│ (Optimize across multiple requests)│
-└─────────────────┬──────────────────┘
-                  │
-                  v
-            Assignment
+```mermaid
+flowchart TD
+    subgraph MATCH [" "]
+        direction TB
+        M_TITLE["MATCHING ALGORITHM"]
+        style M_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        REQ["Request comes in"]
+        QRY["Available Drivers Query<br>(Geospatial + Filters)"]
+        SCR["Scoring (for each candidate)<br>- ETA to pickup<br>- Driver rating<br>- Rider preferences<br>- Fairness constraints"]
+        BAT["Batched Matching<br>(Optimize across multiple requests)"]
+        ASN["Assignment"]
+        
+        REQ --> QRY
+        QRY --> SCR
+        SCR --> BAT
+        BAT --> ASN
+    end
 ```
 
 **WHY - Lý do & Impact:**
@@ -433,28 +391,26 @@ Request comes in:
 
 ## 🛠️ UBER OPEN SOURCE CONTRIBUTIONS
 
-```
-UBER OSS ECOSYSTEM:
-
-Data Engineering:
-├── Apache Hudi         - Incremental data processing
-├── AresDB             - GPU-powered analytics
-├── Cadence            - Workflow orchestration
-└── uReplicator        - Kafka replication
-
-ML/AI:
-├── Horovod            - Distributed training
-├── Ludwig             - No-code ML
-├── Fiber              - Distributed computing
-└── Petastorm          - Parquet for ML
-
-Geospatial:
-└── H3                 - Hexagonal geospatial index
-
-Visualization:
-├── Kepler.gl          - Geospatial visualization
-└── Deck.gl            - Large-scale data viz
-```
+> **UBER OSS ECOSYSTEM:**
+> 
+> * **Data Engineering:**
+>   * Apache Hudi (Incremental data processing)
+>   * AresDB (GPU-powered analytics)
+>   * Cadence (Workflow orchestration)
+>   * uReplicator (Kafka replication)
+> 
+> * **ML/AI:**
+>   * Horovod (Distributed training)
+>   * Ludwig (No-code ML)
+>   * Fiber (Distributed computing)
+>   * Petastorm (Parquet for ML)
+> 
+> * **Geospatial:**
+>   * H3 (Hexagonal geospatial index)
+> 
+> * **Visualization:**
+>   * Kepler.gl (Geospatial visualization)
+>   * Deck.gl (Large-scale data viz)
 
 ---
 

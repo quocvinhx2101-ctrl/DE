@@ -74,163 +74,126 @@ graph TB
 ### 1. Google Cloud Platform (Primary Cloud)
 
 ```
-SPOTIFY ON GCP:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    GCP SERVICES USED                             │
-│                                                                  │
-│  Compute:                                                        │
-│  ├── Google Kubernetes Engine (GKE)                             │
-│  ├── Cloud Dataflow (Apache Beam)                               │
-│  └── Cloud Composer (Airflow managed)                           │
-│                                                                  │
-│  Storage:                                                        │
-│  ├── Google Cloud Storage (GCS) - Data lake                    │
-│  ├── BigQuery - Analytics warehouse                             │
-│  ├── Cloud Bigtable - Feature serving                          │
-│  └── Cloud Spanner - Global metadata                           │
-│                                                                  │
-│  Streaming:                                                      │
-│  └── Cloud Pub/Sub - Event streaming                            │
-│                                                                  │
-│  ML:                                                             │
-│  ├── Vertex AI                                                  │
-│  └── TensorFlow Extended (TFX)                                  │
-└─────────────────────────────────────────────────────────────────┘
-
-
-WHY GCP:
-
-- BigQuery: Excellent for analytics at scale
-- Dataflow: Unified batch/streaming
-- Managed services: Less operational overhead
-- Cost: Competitive for their workload
+> **SPOTIFY ON GCP: SERVICES USED**
+> 
+> * **Compute:**
+>   * Google Kubernetes Engine (GKE)
+>   * Cloud Dataflow (Apache Beam)
+>   * Cloud Composer (Airflow managed)
+> 
+> * **Storage:**
+>   * Google Cloud Storage (GCS) - Data lake
+>   * BigQuery - Analytics warehouse
+>   * Cloud Bigtable - Feature serving
+>   * Cloud Spanner - Global metadata
+> 
+> * **Streaming:**
+>   * Cloud Pub/Sub - Event streaming
+> 
+> * **ML:**
+>   * Vertex AI
+>   * TensorFlow Extended (TFX)
+> 
+> **WHY GCP:**
+> - **BigQuery:** Excellent for analytics at scale
+> - **Dataflow:** Unified batch/streaming
+> - **Managed services:** Less operational overhead
+> - **Cost:** Competitive for their workload
 ```
 
 ### 2. Scio (Spotify Created)
 
 ```
-SCIO - SCALA API FOR APACHE BEAM:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        SCIO                                      │
-│          (Scala library for Apache Beam on GCP)                 │
-│                                                                  │
-│  Example Pipeline:                                               │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                                                           │   │
-│  │  import com.spotify.scio._                                │   │
-│  │  import com.spotify.scio.bigquery._                       │   │
-│  │                                                           │   │
-│  │  object StreamsETL {                                      │   │
-│  │    def main(args: Array[String]): Unit = {                │   │
-│  │      val sc = ScioContext(args)                           │   │
-│  │                                                           │   │
-│  │      sc.pubsubSubscription("streams-sub")                 │   │
-│  │        .map(parseStreamEvent)                             │   │
-│  │        .filter(_.duration > 30000) // > 30 sec           │   │
-│  │        .groupByKey(_.userId)                              │   │
-│  │        .mapValues(calculateMetrics)                       │   │
-│  │        .saveAsBigQuery("streams.daily_metrics")           │   │
-│  │                                                           │   │
-│  │      sc.run()                                             │   │
-│  │    }                                                      │   │
-│  │  }                                                        │   │
-│  │                                                           │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Benefits:                                                       │
-│  - Type-safe Scala API                                          │
-│  - Same code for batch and streaming                            │
-│  - BigQuery, Bigtable, Pub/Sub integration                      │
-│  - Functional programming style                                 │
-└─────────────────────────────────────────────────────────────────┘
+> **SCIO - SCALA API FOR APACHE BEAM:**
+> 
+> **Example Pipeline:**
+> ```scala
+> import com.spotify.scio._
+> import com.spotify.scio.bigquery._
+> 
+> object StreamsETL {
+>   def main(args: Array[String]): Unit = {
+>     val sc = ScioContext(args)
+> 
+>     sc.pubsubSubscription("streams-sub")
+>       .map(parseStreamEvent)
+>       .filter(_.duration > 30000) // > 30 sec
+>       .groupByKey(_.userId)
+>       .mapValues(calculateMetrics)
+>       .saveAsBigQuery("streams.daily_metrics")
+> 
+>     sc.run()
+>   }
+> }
+> ```
+> 
+> **Benefits:**
+> - Type-safe Scala API
+> - Same code for batch and streaming
+> - BigQuery, Bigtable, Pub/Sub integration
+> - Functional programming style
 ```
 
 ### 3. Luigi (Spotify Created - Legacy)
 
 ```
-LUIGI HISTORY:
-
-Created: 2012 (before Airflow)
-Status: Still maintained, but Spotify uses Cloud Composer now
-
-┌─────────────────────────────────────────────────────────────────┐
-│                        LUIGI                                     │
-│              (Python workflow framework)                        │
-│                                                                  │
-│  class ProcessStreams(luigi.Task):                              │
-│      date = luigi.DateParameter()                               │
-│                                                                  │
-│      def requires(self):                                        │
-│          return ExtractStreams(date=self.date)                  │
-│                                                                  │
-│      def output(self):                                          │
-│          return luigi.LocalTarget(                              │
-│              f"/data/processed/{self.date}.parquet"             │
-│          )                                                      │
-│                                                                  │
-│      def run(self):                                             │
-│          # Processing logic                                     │
-│          with self.output().open('w') as f:                     │
-│              f.write(processed_data)                            │
-│                                                                  │
-│  Key Concepts:                                                   │
-│  - Task = unit of work                                          │
-│  - Target = output (idempotency check)                          │
-│  - Dependency resolution                                        │
-│  - Central scheduler                                            │
-└─────────────────────────────────────────────────────────────────┘
-
-Luigi vs Airflow:
-- Luigi: Task-centric, simpler
-- Airflow: DAG-centric, more features
-- Both influenced by Spotify/Airbnb needs
+> **LUIGI HISTORY:**
+> 
+> * **Created:** 2012 (before Airflow)
+> * **Status:** Still maintained, but Spotify uses Cloud Composer now
+> 
+> **Luigi (Python workflow framework) Example:**
+> ```python
+> class ProcessStreams(luigi.Task):
+>     date = luigi.DateParameter()
+> 
+>     def requires(self):
+>         return ExtractStreams(date=self.date)
+> 
+>     def output(self):
+>         return luigi.LocalTarget(
+>             f"/data/processed/{self.date}.parquet"
+>         )
+> 
+>     def run(self):
+>         # Processing logic
+>         with self.output().open('w') as f:
+>             f.write(processed_data)
+> ```
+> 
+> **Key Concepts:**
+> - Task = unit of work
+> - Target = output (idempotency check)
+> - Dependency resolution
+> - Central scheduler
+> 
+> **Luigi vs Airflow:**
+> - **Luigi:** Task-centric, simpler
+> - **Airflow:** DAG-centric, more features
+> - Both influenced by Spotify/Airbnb needs
 ```
 
 ### 4. Backstage (Developer Portal)
 
 ```
-BACKSTAGE ARCHITECTURE:
+```mermaid
+flowchart TD
+    subgraph BACKSTAGE [" "]
+        direction TB
+        B_TITLE["BACKSTAGE<br>(Developer Portal Platform)"]
+        style B_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        SC["Software Catalog<br>- All services, libraries, data pipelines<br>- Ownership information<br>- Dependencies graph<br>- Documentation links"]
+        ST["Software Templates<br>- Create new services (scaffolding)<br>- Standard project structure<br>- CI/CD setup<br>- Best practices embedded"]
+        TD["TechDocs<br>- Documentation as code<br>- Markdown in repo<br>- Rendered in Backstage"]
+        PL["Plugins<br>- CI/CD status<br>- Cost tracking<br>- Data lineage<br>- API documentation"]
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                        BACKSTAGE                                 │
-│              (Developer Portal Platform)                        │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Software Catalog                        │   │
-│  │  - All services, libraries, data pipelines               │   │
-│  │  - Ownership information                                  │   │
-│  │  - Dependencies graph                                     │   │
-│  │  - Documentation links                                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Software Templates                      │   │
-│  │  - Create new services (scaffolding)                     │   │
-│  │  - Standard project structure                            │   │
-│  │  - CI/CD setup                                           │   │
-│  │  - Best practices embedded                               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   TechDocs                                │   │
-│  │  - Documentation as code                                 │   │
-│  │  - Markdown in repo                                      │   │
-│  │  - Rendered in Backstage                                 │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Plugins                                 │   │
-│  │  - CI/CD status                                          │   │
-│  │  - Cost tracking                                         │   │
-│  │  - Data lineage                                          │   │
-│  │  - API documentation                                     │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Now: CNCF Incubating Project                                   │
-│  Used by: 2000+ companies                                       │
-└─────────────────────────────────────────────────────────────────┘
+> **BACKSTAGE ARCHITECTURE:**
+> 
+> * **Now:** CNCF Incubating Project
+> * **Used by:** 2000+ companies
 ```
 
 ---
@@ -248,76 +211,35 @@ BACKSTAGE ARCHITECTURE:
 **HOW - Implementation:**
 
 ```
-DISCOVER WEEKLY PIPELINE:
+```mermaid
+flowchart TD
+    subgraph DISCOVER [" "]
+        direction TB
+        D_TITLE["DISCOVER WEEKLY<br>(30 songs every Monday)"]
+        style D_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        S1["Step 1: User Taste Profile<br>- Listening history (weighted by recency)<br>- Skip patterns<br>- Saves and likes<br>- Playlist additions<br>=> User embedding vector"]
+        
+        S2["Step 2: Collaborative Filtering<br>Users who listen to similar tracks also listen to candidate tracks.<br>User A: [Track1, Track2, Track3, Track7]<br>User B: [Track1, Track2, Track4, Track8] (similar)<br>Recommend Track4, Track8 to User A"]
+        
+        S3["Step 3: Audio Analysis (Content-based)<br>Track Features:<br>- Tempo, key, mode<br>- Energy, danceability<br>- Acousticness, instrumentalness<br>- Deep learning audio embeddings<br>Find tracks with similar audio features"]
+        
+        S4["Step 4: NLP (Taste Analysis)<br>Analyze:<br>- Blog posts about artists<br>- News articles<br>- User reviews<br>=> Track cultural context embeddings"]
+        
+        S5["Step 5: Final Ranking<br>- Combine signals<br>- Filter already-heard tracks<br>- Ensure diversity (genres, artists)<br>- Novelty vs familiarity balance<br>=> 30 tracks for the week"]
+        
+        S1 --> S5
+        S2 --> S5
+        S3 --> S5
+        S4 --> S5
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    DISCOVER WEEKLY                               │
-│              (30 songs every Monday)                            │
-│                                                                  │
-│  Step 1: User Taste Profile                                      │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Listening history (weighted by recency)               │   │
-│  │  - Skip patterns                                          │   │
-│  │  - Saves and likes                                        │   │
-│  │  - Playlist additions                                     │   │
-│  │  => User embedding vector                                 │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Step 2: Collaborative Filtering                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Users who listen to similar tracks...                   │   │
-│  │  also listen to: [candidate tracks]                      │   │
-│  │                                                           │   │
-│  │  User A: [Track1, Track2, Track3, Track7]                │   │
-│  │  User B: [Track1, Track2, Track4, Track8] <- similar    │   │
-│  │                                                           │   │
-│  │  Recommend Track4, Track8 to User A                      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Step 3: Audio Analysis (Content-based)                          │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Track Features:                                          │   │
-│  │  - Tempo, key, mode                                      │   │
-│  │  - Energy, danceability                                  │   │
-│  │  - Acousticness, instrumentalness                        │   │
-│  │  - Deep learning audio embeddings                        │   │
-│  │                                                           │   │
-│  │  Find tracks with similar audio features                 │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Step 4: NLP (Taste Analysis)                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Analyze:                                                 │   │
-│  │  - Blog posts about artists                              │   │
-│  │  - News articles                                         │   │
-│  │  - User reviews                                          │   │
-│  │  => Track cultural context embeddings                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Step 5: Final Ranking                                           │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Combine signals                                       │   │
-│  │  - Filter already-heard tracks                           │   │
-│  │  - Ensure diversity (genres, artists)                    │   │
-│  │  - Novelty vs familiarity balance                        │   │
-│  │  => 30 tracks for the week                               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-
-
-MODELS USED:
-
-1. Matrix Factorization:
-   - User-item interactions
-   - Implicit feedback (plays, skips)
-
-2. Deep Learning:
-   - Audio CNN for feature extraction
-   - Transformer for NLP
-
-3. Approximate Nearest Neighbor:
-   - ANNOY (Spotify created)
-   - Fast similarity search at scale
+> **MODELS USED:**
+> 
+> 1. **Matrix Factorization:** User-item interactions, Implicit feedback (plays, skips)
+> 2. **Deep Learning:** Audio CNN for feature extraction, Transformer for NLP
+> 3. **Approximate Nearest Neighbor:** ANNOY (Spotify created), Fast similarity search at scale
 ```
 
 **WHY - Lý do & Impact:**
@@ -339,48 +261,26 @@ MODELS USED:
 **HOW - Implementation:**
 
 ```
-WRAPPED PIPELINE:
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    SPOTIFY WRAPPED                               │
-│              (Annual listening summary)                         │
-│                                                                  │
-│  Data Collection (Year-round):                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Stream events -> BigQuery                               │   │
-│  │  - Every play, skip, save                                │   │
-│  │  - Context (playlist, search, home)                      │   │
-│  │  - Duration played                                       │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  Aggregation (November):                                         │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Per-user aggregates:                                    │   │
-│  │  - Top artists (by time)                                 │   │
-│  │  - Top songs (by plays)                                  │   │
-│  │  - Top genres                                            │   │
-│  │  - Total minutes                                         │   │
-│  │  - Listening personality                                 │   │
-│  │  - Unique stats (e.g., "top 0.1% listener")             │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  Pre-computation (December 1):                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Generate 600M+ personalized reports                   │   │
-│  │  - Store in Bigtable for fast access                    │   │
-│  │  - Pre-render some visualizations                        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              v                                   │
-│  Launch Day:                                                     │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Massive traffic spike                                 │   │
-│  │  - Bigtable handles read load                           │   │
-│  │  - Social sharing integration                            │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph WRAPPED [" "]
+        direction TB
+        W_TITLE["SPOTIFY WRAPPED<br>(Annual listening summary)"]
+        style W_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        DC["Data Collection (Year-round):<br>Stream events -> BigQuery<br>- Every play, skip, save<br>- Context (playlist, search, home)<br>- Duration played"]
+        
+        AGG["Aggregation (November):<br>Per-user aggregates:<br>- Top artists (by time)<br>- Top songs (by plays)<br>- Top genres<br>- Total minutes<br>- Listening personality<br>- Unique stats (e.g., 'top 0.1% listener')"]
+        
+        PRE["Pre-computation (December 1):<br>- Generate 600M+ personalized reports<br>- Store in Bigtable for fast access<br>- Pre-render some visualizations"]
+        
+        LAU["Launch Day:<br>- Massive traffic spike<br>- Bigtable handles read load<br>- Social sharing integration"]
+        
+        DC --> AGG
+        AGG --> PRE
+        PRE --> LAU
+    end
+```
 ```
 
 **WHY - Lý do & Impact:**
@@ -402,73 +302,52 @@ WRAPPED PIPELINE:
 **HOW - Implementation:**
 
 ```
-RADIO ALGORITHM:
-
-User finishes playlist/album
-         │
-         v
-┌──────────────────────────────────────────┐
-│ Seed Selection                            │
-│ - Last played tracks                      │
-│ - Playlist theme                          │
-│ - User current mood (inferred)            │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Candidate Generation                      │
-│ - Similar tracks (audio features)         │
-│ - Artist relations (graph)                │
-│ - Collaborative filtering                 │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Real-time Ranking                         │
-│ - User preferences                        │
-│ - Context (time, device)                  │
-│ - Variety constraints                     │
-└─────────────────┬────────────────────────┘
-                  │
-                  v
-┌──────────────────────────────────────────┐
-│ Continuous Adaptation                     │
-│ - Track user actions (skips)              │
-│ - Adjust on the fly                       │
-│ - Learn session preferences               │
-└──────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph RADIO [" "]
+        direction TB
+        R_TITLE["RADIO ALGORITHM"]
+        style R_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        START["User finishes playlist/album"]
+        
+        SS["Seed Selection<br>- Last played tracks<br>- Playlist theme<br>- User current mood (inferred)"]
+        
+        CG["Candidate Generation<br>- Similar tracks (audio features)<br>- Artist relations (graph)<br>- Collaborative filtering"]
+        
+        RR["Real-time Ranking<br>- User preferences<br>- Context (time, device)<br>- Variety constraints"]
+        
+        CA["Continuous Adaptation<br>- Track user actions (skips)<br>- Adjust on the fly<br>- Learn session preferences"]
+        
+        START --> SS
+        SS --> CG
+        CG --> RR
+        RR --> CA
+    end
+```
 ```
 
 ### 4. Podcast Recommendations
 
 ```
-PODCAST DISCOVERY:
+```mermaid
+flowchart TD
+    subgraph PODCAST [" "]
+        direction TB
+        P_TITLE["PODCAST RECOMMENDATIONS"]
+        style P_TITLE fill:none,stroke:none,font-weight:bold,color:#333
+        
+        CU["Content Understanding:<br>- Automatic Speech Recognition (ASR)<br>- Topic modeling from transcripts<br>- Episode embeddings<br>- Show-level features"]
+        
+        US["User Signals:<br>- Follow patterns<br>- Completion rates (listened to end?)<br>- Skip patterns<br>- Cross-media preferences (music -> podcasts)"]
+    end
+```
 
-┌─────────────────────────────────────────────────────────────────┐
-│                    PODCAST RECOMMENDATIONS                       │
-│                                                                  │
-│  Content Understanding:                                          │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Automatic Speech Recognition (ASR)                    │   │
-│  │  - Topic modeling from transcripts                       │   │
-│  │  - Episode embeddings                                    │   │
-│  │  - Show-level features                                   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  User Signals:                                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  - Follow patterns                                       │   │
-│  │  - Completion rates (listened to end?)                   │   │
-│  │  - Skip patterns                                         │   │
-│  │  - Cross-media preferences (music -> podcasts)           │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  Challenges:                                                     │
-│  - Cold start (new podcasts)                                    │
-│  - Long-form content (1hr+ episodes)                            │
-│  - Different consumption patterns vs music                      │
-│  - Episode vs show recommendations                              │
-└─────────────────────────────────────────────────────────────────┘
+> **Challenges:**
+> - Cold start (new podcasts)
+> - Long-form content (1hr+ episodes)
+> - Different consumption patterns vs music
+> - Episode vs show recommendations
 ```
 
 ---
@@ -476,23 +355,23 @@ PODCAST DISCOVERY:
 ## 🛠️ SPOTIFY OPEN SOURCE CONTRIBUTIONS
 
 ```
-SPOTIFY OSS ECOSYSTEM:
-
-Data Engineering:
-├── Scio              - Scala API for Apache Beam
-├── Luigi             - Workflow management
-├── ANNOY             - Approximate Nearest Neighbors
-└── Heroic            - Time series database
-
-Developer Experience:
-├── Backstage         - Developer portal (CNCF)
-├── Tingle            - Push notification library
-└── Mobius            - Reactive framework
-
-Audio/ML:
-├── Pedalboard        - Audio effects library
-├── Basic-pitch       - Audio-to-MIDI
-└── Klio              - Audio ML pipelines
+> **SPOTIFY OSS ECOSYSTEM:**
+> 
+> * **Data Engineering:**
+>   * Scio - Scala API for Apache Beam
+>   * Luigi - Workflow management
+>   * ANNOY - Approximate Nearest Neighbors
+>   * Heroic - Time series database
+> 
+> * **Developer Experience:**
+>   * Backstage - Developer portal (CNCF)
+>   * Tingle - Push notification library
+>   * Mobius - Reactive framework
+> 
+> * **Audio/ML:**
+>   * Pedalboard - Audio effects library
+>   * Basic-pitch - Audio-to-MIDI
+>   * Klio - Audio ML pipelines
 ```
 
 ---
@@ -500,24 +379,24 @@ Audio/ML:
 ## 📊 SCALE & NUMBERS
 
 ```
-SPOTIFY BY THE NUMBERS:
-
-Content:
-- 600M+ monthly active users
-- 100M+ tracks
-- 5M+ podcasts
-- 4B+ playlists
-
-Data:
-- Billions of stream events/day
-- Petabytes in BigQuery
-- Exabytes in GCS
-- 1000s of ML models
-
-Infrastructure:
-- 100s of microservices
-- 10,000s of Dataflow jobs/day
-- Multi-region GCP deployment
+> **SPOTIFY BY THE NUMBERS:**
+> 
+> * **Content:**
+>   * 600M+ monthly active users
+>   * 100M+ tracks
+>   * 5M+ podcasts
+>   * 4B+ playlists
+> 
+> * **Data:**
+>   * Billions of stream events/day
+>   * Petabytes in BigQuery
+>   * Exabytes in GCS
+>   * 1000s of ML models
+> 
+> * **Infrastructure:**
+>   * 100s of microservices
+>   * 10,000s of Dataflow jobs/day
+>   * Multi-region GCP deployment
 ```
 
 ---

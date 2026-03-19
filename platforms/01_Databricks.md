@@ -191,28 +191,21 @@ Serverless:
 End-to-end ML lifecycle management.
 
 **Components:**
-```
-MLflow (Open Source):
-+------------------+
-| Tracking         | - Log experiments
-+------------------+
-| Projects         | - Reproducible runs
-+------------------+
-| Models           | - Model packaging
-+------------------+
-| Registry         | - Model versioning
-+------------------+
-
-Databricks Additions:
-+------------------+
-| Model Serving    | - Real-time endpoints
-+------------------+
-| Feature Store    | - Feature management
-+------------------+
-| AutoML           | - Automated training
-+------------------+
-| Lakehouse AI     | - LLM integration
-+------------------+
+```mermaid
+flowchart LR
+    subgraph OSS ["MLflow (Open Source)"]
+        TR["Tracking<br>Log experiments"]
+        PR["Projects<br>Reproducible runs"]
+        MO["Models<br>Model packaging"]
+        RE["Registry<br>Model versioning"]
+    end
+    
+    subgraph DBX ["Databricks Additions"]
+        MS["Model Serving<br>Real-time endpoints"]
+        FS["Feature Store<br>Feature management"]
+        AM["AutoML<br>Automated training"]
+        LAI["Lakehouse AI<br>LLM integration"]
+    end
 ```
 
 ### 6. Workflows
@@ -422,33 +415,38 @@ graph TB
 
 ### What You Pay For
 
+```mermaid
+flowchart TD
+    subgraph OSS ["OSS Equivalent Stack"]
+        direction TB
+        O1["Spark (self-managed)"]
+        O2["Delta Lake (OSS)"]
+        O3["MLflow (self-managed)"]
+        O4["Hive Metastore"]
+        O5["Airflow (orchestration)"]
+        O6["Custom governance"]
+        O7["Custom monitoring"]
+        O1~~~O2~~~O3~~~O4~~~O5~~~O6~~~O7
+    end
+    
+    subgraph DBX ["Databricks"]
+        direction TB
+        D1["Databricks Runtime"]
+        D2["Photon Engine"]
+        D3["Unity Catalog"]
+        D4["Managed MLflow"]
+        D5["Workflows"]
+        D6["SQL Warehouses"]
+        D7["Support"]
+        D1~~~D2~~~D3~~~D4~~~D5~~~D6~~~D7
+    end
 ```
-OSS Equivalent Stack:
-+------------------+
-| Spark (self-managed)
-| Delta Lake (OSS)
-| MLflow (self-managed)
-| Hive Metastore
-| Airflow (orchestration)
-| Custom governance
-| Custom monitoring
-+------------------+
-Effort: High
-Cost: Cloud compute + Ops team
 
-Databricks:
-+------------------+
-| Databricks Runtime
-| Photon Engine
-| Unity Catalog
-| Managed MLflow
-| Workflows
-| SQL Warehouses
-| Support
-+------------------+
-Effort: Low
-Cost: DBU pricing + Cloud compute
-```
+**OSS Effort:** High
+**OSS Cost:** Cloud compute + Ops team
+
+**Databricks Effort:** Low
+**Databricks Cost:** DBU pricing + Cloud compute
 
 ---
 
@@ -456,27 +454,24 @@ Cost: DBU pricing + Cloud compute
 
 ### DBU (Databricks Unit)
 
-```
-DBU = Abstract compute unit
+**DBU = Abstract compute unit**
 Price varies by:
 - Cloud (AWS, Azure, GCP)
 - Workload type
 - Commitment level
 
-Approximate DBU rates (2025):
-+------------------------+------------+
-| Workload               | $/DBU      |
-+------------------------+------------+
-| Jobs Compute           | $0.15      |
-| All-Purpose Compute    | $0.40      |
-| SQL (Classic)          | $0.22      |
-| SQL (Pro)              | $0.55      |
-| SQL (Serverless)       | $0.70      |
-| Serverless Compute     | $0.70      |
-+------------------------+------------+
+**Approximate DBU rates (2025):**
 
-Plus: Cloud infrastructure cost (EC2, etc.)
-```
+| Workload | $/DBU |
+|---|---|
+| Jobs Compute | $0.15 |
+| All-Purpose Compute | $0.40 |
+| SQL (Classic) | $0.22 |
+| SQL (Pro) | $0.55 |
+| SQL (Serverless) | $0.70 |
+| Serverless Compute | $0.70 |
+
+*Plus: Cloud infrastructure cost (EC2, etc.)*
 
 ### Cost Optimization Tips
 

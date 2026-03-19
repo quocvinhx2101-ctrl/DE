@@ -16,7 +16,7 @@ Review này cố ý ưu tiên:
 
 ### In scope
 - Tất cả Markdown files trong [Fun](../)
-- Root docs: [README.md](../README.md), [MY_LEARNING_ROADMAP.md](../MY_LEARNING_ROADMAP.md)
+- Root docs: [README.md](../README.md), [MY_LEARNING_ROADMAP.md](ROADMAP.md)
 - Folder-level READMEs
 - Python helper scripts:
   - [convert_ascii.py](../convert_ascii.py)

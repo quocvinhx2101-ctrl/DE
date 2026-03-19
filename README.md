@@ -6,13 +6,13 @@
 
 ## 📚 GIỚI THIỆU
 
-Repository này chứa **115 guides** kiến thức toàn diện về Data Engineering:
+Repository này chứa **114 guides** kiến thức toàn diện về Data Engineering:
 
 | Category | Files | Description |
 |----------|-------|-------------|
 | **architecture/**| 3 | Data Stack Patterns cho 3 quy mô công ty |
 | **papers/** | 11 | Research papers gốc |
-| **fundamentals/** | 26 | Kiến thức nền tảng + SWE + Testing + Advanced |
+| **fundamentals/** | 29 | Kiến thức nền tảng + SWE + Testing + CS Core + Advanced |
 | **tools/** | 21 | SOTA tools 2025 + IaC + GenAI |
 | **usecases/** | 13 | BigTech + SME case studies |
 | **projects/** | 9 | Hands-on projects (incl. debug & migration) |
@@ -35,7 +35,6 @@ Tất cả guides được viết với:
 ```
 Fun/
 ├── README.md                        # File này (Master Index)
-├── MY_LEARNING_ROADMAP.md           # Lộ trình học cá nhân
 │
 ├── architecture/                    # Patterns & Blueprints (3 files)
 │   ├── 01_Startup_Stack.md          # Stack cho Startup 0-1TB
@@ -80,7 +79,10 @@ Fun/
 │   ├── 23_Data_Mesh_Data_Products.md            # NEW
 │   ├── 24_Data_Contracts.md                     # NEW
 │   ├── 25_Reverse_ETL.md                        # NEW
-│   └── 26_Data_Testing_Patterns.md              # NEW
+│   ├── 26_Data_Testing_Patterns.md              # NEW
+│   ├── 27_SQL_Compiler_AST.md                   # NEW — CS Core
+│   ├── 28_Memory_Layout_Apache_Arrow.md         # NEW — CS Core
+│   └── 29_Probabilistic_Data_Structures.md      # NEW — CS Core
 │
 ├── tools/                           # SOTA Tools (21 files)
 │   ├── 00_SOTA_Overview_2025.md
@@ -180,7 +182,7 @@ Week 4: Cloud + Practice
 ### Path 2: Comprehensive (6 tháng)
 
 ```
-Xem chi tiết: MY_LEARNING_ROADMAP.md
+Xem chi tiết trong thư mục `roadmap/` (Lộ trình chi tiết)
 ```
 
 ---
@@ -270,9 +272,9 @@ TOTAL CONTENT:
 ├── platforms/        6 files (Cloud platforms + README)
 ├── mindset/          7 files (Senior mindset + Operations + Leadership + README)
 ├── business/         9 files (Business impact + README)
-└── Root              2 files (README + MY_LEARNING_ROADMAP)
+└── Root              1 file (README)
 ─────────────────────────────────────
-TOTAL:               115 comprehensive guides
+TOTAL:               114 comprehensive guides
 ```
 
 ---
@@ -281,7 +283,7 @@ TOTAL:               115 comprehensive guides
 
 - **Created:** February 2026
 - **Last Updated:** February 2026
-- **Total Guides:** 115 files across 10 folders
+- **Total Guides:** 114 files across 10 folders
 - **Format:** Markdown with Mermaid diagrams
 
 ---
