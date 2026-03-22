@@ -20,7 +20,7 @@
 
 ### Data Quality Landscape
 
-```
+
 > **Data Quality Stack:**
 > 
 > * **Data Observability** (Proactive monitoring, anomaly detection)
@@ -31,11 +31,11 @@
 > 
 > * **Data Profiling** (Understanding data characteristics)
 >   * All tools above + Pandas Profiling, ydata-profiling
-```
+
 
 ### Key Data Quality Dimensions
 
-```
+
 > **Data Quality Dimensions:**
 > 
 > 1. **Accuracy**: Data reflects real-world correctly (Example: Email format is valid)
@@ -45,7 +45,7 @@
 > 5. **Uniqueness**: No duplicates exist (Example: One record per customer)
 > 6. **Validity**: Data conforms to defined rules (Example: Age between 0 and 150)
 > 7. **Volume**: Expected amount of data present (Example: Daily records count within range)
-```
+
 
 ---
 
@@ -67,7 +67,7 @@ Great Expectations là một **open-source Python library** cho data validation,
 
 ### Architecture
 
-```
+
 ```mermaid
 flowchart TD
     subgraph ARCH [" "]
@@ -96,7 +96,7 @@ flowchart TD
         CTX --- COMPS
     end
 ```
-```
+
 
 ### Core Concepts
 
@@ -339,7 +339,7 @@ Monte Carlo là một **data observability platform** tập trung vào automated
 
 ### Architecture
 
-```
+
 ```mermaid
 flowchart TD
     subgraph MC [" "]
@@ -382,12 +382,12 @@ flowchart TD
         INT ~~~ SUP
     end
 ```
-```
+
 
 ### Core Concepts
 
 **1. Automated Monitors:**
-```
+
 > **Monitor Types:**
 > 
 > * **Freshness Monitor**: Detects when data stops arriving ("Table hasn't been updated in 6 hours")
@@ -396,10 +396,10 @@ flowchart TD
 > * **Distribution Monitor (Field Health)**: Detects data distribution anomalies ("NULL rate increased from 1% to 15%", "Average value dropped 40%")
 > * **Custom SQL Monitor**: Your own assertions ("SELECT COUNT(*) FROM orders WHERE amount < 0")
 > * **Dimension Tracking**: Segment-level monitoring ("Region=APAC volume dropped 80%")
-```
+
 
 **2. Lineage:**
-```
+
 ```mermaid
 flowchart LR
     subgraph LIN [" "]
@@ -422,7 +422,7 @@ flowchart LR
         FLOW ~~~ INC
     end
 ```
-```
+
 
 **3. Circuit Breakers:**
 ```python
@@ -483,7 +483,7 @@ Soda là một **data quality platform** với cả open-source library (Soda Co
 
 ### Architecture
 
-```
+
 ```mermaid
 flowchart TD
     subgraph SODA [" "]
@@ -504,7 +504,7 @@ flowchart TD
         CORE -->|"Results"| SC
     end
 ```
-```
+
 
 ### SodaCL (Soda Checks Language)
 
@@ -684,7 +684,7 @@ soda_pipeline()
 
 ## 📊 Feature Comparison
 
-```
+
 | Feature | GX | Monte Carlo | Soda |
 | :--- | :--- | :--- | :--- |
 | **Open Source Core** | ✅ Yes | ❌ No | ✅ Yes |
@@ -704,7 +704,7 @@ soda_pipeline()
 * GX Cloud: Free tier → ~$500/month+
 * Monte Carlo: Enterprise only (~$2K+/month)
 * Soda Cloud: Free tier → ~$300/month+
-```
+
 
 ---
 
@@ -712,7 +712,7 @@ soda_pipeline()
 
 ### Pattern 1: Testing Before Load
 
-```
+
 ```mermaid
 flowchart LR
     subgraph PRE [" "]
@@ -729,11 +729,11 @@ flowchart LR
         ALT ~~~ IMPL
     end
 ```
-```
+
 
 ### Pattern 2: Continuous Monitoring
 
-```
+
 ```mermaid
 flowchart TD
     subgraph OBS [" "]
@@ -765,11 +765,11 @@ flowchart TD
         AN --> ACT
     end
 ```
-```
+
 
 ### Pattern 3: Layered Quality
 
-```
+
 > **Combined Approach: Layered Quality**
 > 
 > * **Layer 1: Source Validation (Soda/GX)**
@@ -780,7 +780,7 @@ flowchart TD
 >   * Anomaly detection, freshness SLAs, distribution drift
 > * **Layer 4: Business Validation (Custom)**
 >   * KPI reconciliation, cross-system consistency
-```
+
 
 ---
 
@@ -788,7 +788,7 @@ flowchart TD
 
 ### Choose Great Expectations When:
 
-```
+
 ✅ Best for GX:
 • Python-centric team
 • Need detailed documentation generation
@@ -801,11 +801,11 @@ flowchart TD
 • Non-technical data teams
 • Want automated anomaly detection
 • Need lineage features
-```
+
 
 ### Choose Monte Carlo When:
 
-```
+
 ✅ Best for Monte Carlo:
 • Enterprise with budget
 • Need automated observability
@@ -819,11 +819,11 @@ flowchart TD
 • Need local testing
 • Want open-source only
 • Need Spark integration
-```
+
 
 ### Choose Soda When:
 
-```
+
 ✅ Best for Soda:
 • Want simple YAML-based checks
 • Need both OSS and cloud option
@@ -835,7 +835,7 @@ flowchart TD
 • Need advanced lineage
 • Complex custom validations
 • Python-heavy workflows
-```
+
 
 ---
 

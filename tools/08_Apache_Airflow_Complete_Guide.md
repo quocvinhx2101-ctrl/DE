@@ -102,7 +102,7 @@ Apache Airflow là một **workflow orchestration platform** cho phép programma
 
 ### Component Architecture
 
-```
+
 ```mermaid
 flowchart TD
     subgraph ARCH [" "]
@@ -162,11 +162,10 @@ Executor Comparison:
 >   * Hybrid: Celery for fast tasks
 >   * Kubernetes for heavy tasks
 >   * Good for: Mixed workloads
-```
+
 
 ### DAG File Processing
 
-```
 DAG Parsing Flow:
 ```mermaid
 flowchart TD
@@ -184,7 +183,7 @@ flowchart TD
         P1 --> P2 --> P3 --> P4 --> P5
     end
 ```
-```
+
 
 ---
 
@@ -219,7 +218,7 @@ dag = DAG(
 
 ### 2. Task States
 
-```
+
 Task Lifecycle:
 ```mermaid
 flowchart LR
@@ -244,7 +243,7 @@ flowchart LR
         FLOW ~~~ COLORS
     end
 ```
-```
+
 
 ### 3. XCom (Cross-Communication)
 
@@ -972,7 +971,7 @@ spark_dag = spark_etl_pipeline()
 
 ### 1. Data Warehouse ETL
 
-```
+
 ```mermaid
 flowchart LR
     subgraph DWH [" "]
@@ -994,11 +993,11 @@ flowchart LR
         DAG ~~~ META
     end
 ```
-```
+
 
 ### 2. ML Pipeline Orchestration
 
-```
+
 ```mermaid
 flowchart TD
     subgraph ML [" "]
@@ -1018,11 +1017,11 @@ flowchart TD
         end
     end
 ```
-```
+
 
 ### 3. Real-time + Batch Hybrid
 
-```
+
 ```mermaid
 flowchart TD
     subgraph HYB [" "]
@@ -1041,7 +1040,7 @@ flowchart TD
         RT ~~~ BATCH
     end
 ```
-```
+
 
 ---
 

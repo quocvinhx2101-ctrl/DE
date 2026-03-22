@@ -554,7 +554,7 @@ def ml_features(fct_orders: pd.DataFrame) -> pd.DataFrame:
 ### Dagster Code Examples
 
 **Complete Project Structure:**
-```
+```bash
 my_dagster_project/
 ├── pyproject.toml
 ├── setup.py

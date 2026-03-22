@@ -124,6 +124,41 @@ sequenceDiagram
 - **Data Lake architecture** — Large file, append-only patterns
 - **Colossus** — Google's successor to GFS (2010+)
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Single master bottleneck**: metadata hot-spot và SPOF logic (dù có recovery).
+- **Weak consistency** làm app layer phải gánh complexity dedup/checksum.
+- **Evolution:** Colossus, HDFS HA + federation, object storage metadata services tách riêng control plane/data plane.
+
+### War Stories & Troubleshooting
+- **Small files explosion** làm master metadata phình to, RPC queue tăng mạnh.
+- **Fix nhanh:** compaction job (merge files), enforce min file size trong pipeline, cảnh báo khi file count/partition vượt ngưỡng.
+
+### Metrics & Order of Magnitude
+- Chunk size lớn (64MB trong paper; thực tế thường 128MB+ ở hệ mới) giúp giảm metadata entries theo bậc độ lớn.
+- Replication factor 3 thường đánh đổi ~3x storage để lấy durability/availability.
+- Throughput sequential read/write thường cao hơn random I/O từ 1-2 bậc độ lớn.
+
+### Micro-Lab
+```bash
+# Tạo nhanh vài file nhỏ + 1 file lớn để mô phỏng small-files issue
+mkdir -p /tmp/gfs_lab && seq 1 200 | xargs -I{} sh -c 'dd if=/dev/zero of=/tmp/gfs_lab/f_{}.bin bs=64K count=1 status=none'
+dd if=/dev/zero of=/tmp/gfs_lab/big.bin bs=1M count=128 status=none
+# Đếm số file nhỏ (<32MB) và tổng dung lượng
+find /tmp/gfs_lab -type f -size -32M | wc -l
+du -sh /tmp/gfs_lab
+```
+
+--- 
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** GFS (và HDFS) có một điểm nghẽn cổ chai cực kỳ tồi tệ: **Single Master Architecture**. Cục Master (NameNode) phải lưu toàn bộ metadata của mọi file trên RAM. Nếu user đẩy lên hàng triệu file nhỏ (Small File Problem), RAM của NameNode sẽ nổ tung (OOM) dù ổ cứng (DataNode) vẫn còn trống trơn. Giải pháp tiến hóa sau này là Colossus (Google) chia nhỏ Master ra, hoặc dùng Object Storage (S3/MinIO).
+    
+2. **War Stories & Troubleshooting:** Anh từng cứu một cụm Hadoop bị sập hoàn toàn chỉ vì team Data Scientist lưu log model mỗi phút thành 1 file text 1KB. NameNode bị quá tải rác metadata. Cách fix: Viết một job Spark đọc hàng triệu file nhỏ đó và `coalesce()` lại thành các file Parquet 128MB.
+    
+3. **Metrics & Order of Magnitude:** Block size mặc định của GFS là 64MB (HDFS thường là 128MB hoặc 256MB). Chạy query analytic trên file 10GB chia thành các block 128MB sẽ nhanh hơn gấp chục lần so với quét 10.000 file 1MB.
+    
+4. **Micro-Lab:** Khởi tạo một bucket MinIO (S3-compatible) bằng Docker để thay thế HDFS trên local: `docker run -p 9000:9000 -p 9001:9001 minio/minio server /data`
+
 ---
 
 ## 2. MAPREDUCE - 2004
@@ -244,6 +279,44 @@ graph TD
 - **Apache Spark** — Extended model (DAG, in-memory, iterative)
 - **Apache Flink** — Stream-first, batch as special case
 - **All batch processing** — map() and reduce() are universal concepts
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- **High latency** do materialize giữa stages + disk-heavy shuffle.
+- **Poor fit for iterative workloads** (ML/graph) vì re-read/recompute nhiều lần.
+- **Evolution:** Spark DAG engine, Flink unified stream-batch, Beam/Dataflow model.
+
+### War Stories & Troubleshooting
+- **Straggler tasks** kéo dài tail latency toàn job.
+- **Fix nhanh:** bật speculative execution, tăng parallelism hợp lý, xử lý skew key trước shuffle.
+
+### Metrics & Order of Magnitude
+- Batch SLA thường ở mức phút-giờ, không phù hợp use case < vài giây.
+- Shuffle thường chiếm 50%+ job time ở workload join/aggregation lớn.
+- Combiner tốt có thể giảm network shuffle traffic theo bậc 2-10x tùy cardinality.
+
+
+### Micro-Lab
+```python
+# Demo skew gây straggler: 1 key chiếm áp đảo
+from collections import Counter
+records = ['hot'] * 100000 + ['cold'] * 100 + ['warm'] * 80
+dist = Counter(records)
+print(dist.most_common())
+print("hot_ratio=", round(dist['hot'] / sum(dist.values()), 4))
+```
+
+--- 
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+_Bản thân MapReduce đã chết, cần giải thích rõ cho Junior tại sao nó chết để tôn vinh Spark._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** MapReduce quá lạm dụng I/O ổ cứng. Cứ xong phase Map là nó phải ghi data tạm (spill) xuống disk để chống lỗi, rồi phase Reduce lại đọc lên. Chạy một chuỗi pipeline dài sẽ tốn 80% thời gian chỉ để đọc/ghi disk. Đó là lý do Spark ra đời và đập chết MapReduce bằng việc giữ data in-memory (RDD).
+    
+2. **War Stories & Troubleshooting:** Lỗi kinh điển nhất là **Straggler (Kẻ tụt hậu) & Data Skew**. Cả job 100 task, 99 task chạy xong trong 2 phút, task cuối cùng chứa cái key bị nghiêng data (ví dụ key `null` hoặc key `user_id = bot`) chạy mất 2 tiếng. Cách fix: Thêm salt key (tạo random id) để phá vỡ data skew trước khi group by/reduce.
+    
+3. **Metrics & Order of Magnitude:** MapReduce setup overhead rất cao (mất 10-30s chỉ để khởi tạo JVM container trên YARN). Do đó, dùng MapReduce/Hive để chạy query real-time là thảm họa.
+    
+4. **Micro-Lab:** Để hiểu MapReduce, không cần cài Hadoop, chỉ cần xài pipe của Linux: `cat data.txt | tr ' ' '\n' | sort | uniq -c | sort -nr` (Đây chính là logic Map -> Shuffle/Sort -> Reduce của bài toán Word Count kinh điển).
 
 ---
 
@@ -391,6 +464,46 @@ graph TB
 - **Google Cloud Bigtable** — Managed Bigtable service
 - **LSM-tree databases** — RocksDB, LevelDB, ScyllaDB
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Schema design khó sửa** khi row-key sai (hot partition, scan kém).
+- **Compaction debt** tăng mạnh khi write-heavy.
+- **Evolution:** adaptive sharding, tiered storage, managed autoscaling Bigtable/HBase ecosystems.
+
+### War Stories & Troubleshooting
+- **Hot tablet/hotspot** do key tăng tuần tự (timestamp raw).
+- **Fix nhanh:** salt/bucket key, đảo thứ tự key (reverse timestamp), pre-split tablets.
+
+### Metrics & Order of Magnitude
+- Point read thường ở mức ms–tens of ms khi key design tốt.
+- Compaction có thể ăn 20-40% disk I/O nếu tuning kém.
+- Bloom filter tốt giảm read amplification đáng kể (thường nhiều lần trên negative lookups).
+
+### Micro-Lab
+```sql
+-- Kiểm tra phân phối key để phát hiện hotspot
+SELECT key_prefix, COUNT(*) AS c
+FROM events
+GROUP BY key_prefix
+ORDER BY c DESC
+LIMIT 10;
+
+-- Nếu top 1 key vượt xa median key count => cần salting/bucketing
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _Lưu ý: Bigtable chính là nguồn cảm hứng trực tiếp cho Apache HBase và Cassandra._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Yếu điểm chí mạng của Bigtable (và HBase) là thiết kế **Row Key Hotspotting**. Nếu em thiết kế Row Key là `timestamp` tăng dần, toàn bộ request ghi data sẽ đổ dồn vào đúng một node (Region Server) duy nhất, làm node đó chết ngắc trong khi các node khác ngồi chơi. Khắc phục bằng cách phải "salt" (thêm chuỗi hash ngẫu nhiên) vào đầu Row Key.
+    
+2. **War Stories & Troubleshooting:** Lỗi "Region in Transition" vĩnh viễn trong HBase. Khi một node sập (ví dụ khi chạy ép tải trên con HP Z440), Master cố gắng gán lại vùng dữ liệu (Region) cho node khác nhưng file WAL bị hỏng hoặc Zookeeper bị trễ, dẫn đến data bị khóa hoàn toàn không thể đọc ghi. Cách fix thường phải can thiệp bằng tool `hbase hbck` để vá metadata.
+    
+3. **Metrics & Order of Magnitude:** Bigtable sinh ra cho Point-Lookup (đọc một dòng cụ thể) và Scan theo dải (Range Scan), tốc độ đọc/ghi đo bằng millisecond (dưới 10ms). Nhưng nếu em dùng nó để chạy `SELECT COUNT(*)` (Full table scan), nó sẽ chậm hơn cả RDBMS truyền thống.
+    
+4. **Micro-Lab:** Tự mở local HBase shell và thử tạo bảng, thiết kế Row Key để thấy NoSQL không có quan hệ (JOIN) như thế nào: `create 'users', 'info'` `put 'users', 'user_123', 'info:name', 'John'` `scan 'users'`
+
+
 ---
 
 ## 4. DYNAMO - 2007
@@ -503,6 +616,42 @@ Merkle Tree for Node A:          Merkle Tree for Node B:
 - **Riak** — Dynamo-inspired database
 - **Voldemort** — LinkedIn's Dynamo implementation
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Eventual consistency** gây conflict resolution phức tạp ở application.
+- **Operational complexity** với repair/hinted handoff/vector clock.
+- **Evolution:** DynamoDB transactions, CRDT patterns, managed repair/autoscaling.
+
+### War Stories & Troubleshooting
+- **Anti-entropy backlog** làm replica lệch dữ liệu kéo dài.
+- **Fix nhanh:** tăng cadence repair theo token range, theo dõi hint queue, giới hạn write burst khi node degraded.
+
+### Metrics & Order of Magnitude
+- p99 write/read thường tăng mạnh khi R/W cấu hình không cân bằng với failure mode.
+- RF=3 + quorum (R=2/W=2) là điểm cân bằng phổ biến cho durability/latency.
+- Repair full cluster có thể kéo dài từ giờ đến ngày tùy dung lượng.
+
+### Micro-Lab
+```python
+# Kiểm tra quorum overlap cho nhiều cấu hình
+configs = [(3,2,2), (3,1,1), (5,3,2), (5,2,2)]
+for N, R, W in configs:
+    overlap = R + W > N
+    print(f"N={N}, R={R}, W={W}, overlap={overlap}")
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _Lưu ý: Dynamo là tổ tiên của các hệ thống Eventual Consistency như Cassandra, Riak._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Đánh đổi lớn nhất của Dynamo là bắt Application (code của lập trình viên) phải tự giải quyết xung đột dữ liệu (Conflict Resolution) khi có nhiều node trả về kết quả khác nhau do **Eventual Consistency**. Lập trình viên rất ghét điều này. Cassandra sau này đã phải thêm cơ chế LWW (Last Write Wins) dựa trên timestamp để giấu sự phức tạp này đi.
+    
+2. **War Stories & Troubleshooting:** Hiện tượng "Ghost Data". Khi em xóa một bản ghi, Cassandra không xóa thật mà tạo ra một cái cờ báo tử gọi là **Tombstone**. Nếu em setup thời gian `gc_grace_seconds` sai, node chết sống lại sẽ làm dữ liệu đã xóa... hiện hình trở lại (Zombie data).
+    
+3. **Metrics & Order of Magnitude:** Luôn nhớ công thức cấu hình Quorum: `W (Write) + R (Read) > N (Replication Factor)`. Nếu N=3, set W=2, R=2 thì em có Strong Consistency (chắc chắn đọc được data mới nhất) nhưng hy sinh chút Latency.
+    
+4. **Micro-Lab:** Chạy Cassandra bằng Docker và thử cấu hình Consistency Level để thấy sự khác biệt: `docker run -d --name cass -p 9042:9042 cassandra:latest` (Vào `cqlsh` gõ: `CONSISTENCY QUORUM;`)
+
+
 ---
 
 ## 5. CHUBBY - 2006
@@ -591,6 +740,39 @@ sequenceDiagram
 - **Consul** — HashiCorp's service mesh + coordination
 - **Kafka, HBase, HDFS** — All originally used ZooKeeper
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Not for high-QPS data plane**: phù hợp coordination, không phải serving store.
+- **Watcher storm** dễ nghẽn khi fan-out lớn.
+- **Evolution:** etcd/Consul với API đơn giản hơn, tốt hơn cho cloud-native control plane.
+
+### War Stories & Troubleshooting
+- **Session timeout flapping** gây leader election liên tục.
+- **Fix nhanh:** tách network plane ổn định, tăng timeout hợp lý, giảm số watch không cần thiết.
+
+### Metrics & Order of Magnitude
+- Cụm coordination thường 3-5 nodes; latency write nên giữ ở mức low-ms để control plane ổn định.
+- Tần suất thay đổi config càng cao càng cần batching/debouncing watcher events.
+- Snapshot + log compaction định kỳ giúp tránh phình WAL.
+
+### Micro-Lab
+```bash
+# Kiểm tra nhanh endpoint health (ví dụ etcd)
+etcdctl endpoint health -w table
+# Kiểm tra thêm độ trễ endpoint để phát hiện node chậm
+etcdctl endpoint status -w table
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _Lưu ý: Chubby đẻ ra Apache ZooKeeper và etcd._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Chubby (hay Zookeeper) là một **Lock Service** (hệ thống giữ khóa), KHÔNG phải là một Database. Rất nhiều Junior nhầm lẫn và nhét cả cục config file vài MB vào Zookeeper. Hậu quả là Zookeeper nổ RAM và sập toàn bộ cluster vì nó phải đồng bộ cục data đó qua tất cả các node.
+    
+2. **War Stories & Troubleshooting:** Lỗi **"Split Brain"** và **"Session Expired"**. Khi có một node (như Spark Driver) bận dọn rác bộ nhớ (GC Pause) quá lâu, nó không gửi được heartbeat (nhịp tim) cho Zookeeper. Zookeeper tưởng nó chết nên tước quyền Master, nhưng bản thân node đó vẫn nghĩ mình là Master. Xảy ra hiện tượng 2 thằng cùng ghi đè dữ liệu phá nát hệ thống.
+    
+3. **Metrics & Order of Magnitude:** Một cụm Zookeeper/etcd chỉ nên có số node lẻ (3, 5, hoặc 7 node). Nhiều hơn 7 node thì tốc độ Write sẽ tụt thê thảm vì phải chờ đồng thuận qua mạng.
+    
+4. **Micro-Lab:** Dùng etcdctl (hoặc zkCli) để tạo một khóa (ephemeral node) tự động bốc hơi khi ngắt kết nối: `etcdctl put /my_lock "locked" --lease=12345`
 ---
 
 ## 6. SPANNER - 2012
@@ -699,6 +881,42 @@ graph TB
 - **YugabyteDB** — Distributed SQL (Hybrid Logical Clocks)
 - **TiDB** — PingCAP's Spanner-inspired database
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Commit-wait tax**: external consistency đổi bằng latency cộng thêm.
+- **Cross-region cost** cao (network + quorum + replication).
+- **Evolution:** HLC-based systems (Cockroach/Yugabyte) giảm phụ thuộc clock infra chuyên dụng.
+
+### War Stories & Troubleshooting
+- **Leader placement sai** làm p99 tăng đột biến cho traffic đa vùng.
+- **Fix nhanh:** đặt leader gần write-heavy region, pin locality theo workload, tách hot ranges.
+
+### Metrics & Order of Magnitude
+- Read-write tx đa vùng thường cao hơn local tx theo bậc nhiều ms đến hàng chục ms.
+- Read-only/snapshot read rẻ hơn đáng kể và phù hợp analytic/serving mixed workloads.
+- Replication đa region thường kéo chi phí egress đáng kể (cần budget guardrail).
+
+### Micro-Lab
+```sql
+-- Snapshot read để giảm contention với read-write tx
+SELECT COUNT(*)
+FROM orders AS OF SYSTEM TIME '-5s';
+
+-- So sánh với current read để thấy chênh lệch nhanh
+SELECT COUNT(*) FROM orders;
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+>_Lưu ý: Đây là Database vĩ đại nhất của Google._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Spanner cam kết tính nhất quán phân tán toàn cầu (Global Serializable) bằng cách sử dụng **TrueTime API** (đồng hồ nguyên tử GPS). Nếu em mang Spanner ra khỏi trung tâm dữ liệu của Google (chạy open-source như CockroachDB), do không có phần cứng TrueTime, độ trễ cho mỗi giao dịch (Transaction Latency) qua các lục địa sẽ cực kỳ cao do phải cộng thêm sai số đồng hồ.
+    
+2. **War Stories & Troubleshooting:** Khách hàng migrate từ MySQL lên Cloud Spanner giữ nguyên thói quen viết các Transaction siêu to, khóa (lock) hàng nghìn dòng. Kết quả là transaction bị Abort (hủy) liên tục do contention (tranh chấp khóa phân tán). Với Spanner, phải chia nhỏ transaction và tối ưu lại Data Interleaving.
+    
+3. **Metrics & Order of Magnitude:** Nhờ TrueTime, sai số đồng hồ (epsilon) ở Google được ép xuống dưới 7ms. Do đó khi commit một transaction, hệ thống chỉ cần chờ đợi (Commit Wait) đúng 7ms là chắc chắn an toàn.
+    
+4. **Micro-Lab:** Chạy Google Cloud Spanner Emulator cục bộ để test SQL dialect của nó: `docker run -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator`
 ---
 
 ## 7. DREMEL - 2010
@@ -781,6 +999,41 @@ graph TB
 - **Apache Drill** — Open-source Dremel implementation
 - **Presto/Trino** — Similar tree-structured query execution
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Best-effort interactive** vẫn có tail latency khi query skew hoặc metadata quá lớn.
+- **Nested schema complexity** dễ gây query khó optimize nếu modeling kém.
+- **Evolution:** serverless autoscaling warehouse, adaptive execution, vectorized engines.
+
+### War Stories & Troubleshooting
+- **SELECT *** trên bảng wide gây scan cost/latency bùng nổ.
+- **Fix nhanh:** ép column pruning, partition + clustering đúng cột filter, materialized view cho query nóng.
+
+### Metrics & Order of Magnitude
+- Column pruning có thể giảm bytes scanned từ 5-50x trên wide tables.
+- Query interactive tốt thường giữ p50 ở giây thấp, nhưng p99 phụ thuộc mạnh vào skew.
+- Nested data đúng mô hình giúp giảm join cost đáng kể.
+
+### Micro-Lab
+```sql
+-- So sánh plan/cost giữa SELECT * và column pruning
+EXPLAIN SELECT * FROM events WHERE event_date='2026-03-20';
+EXPLAIN SELECT user_id, event_time FROM events WHERE event_date='2026-03-20';
+
+-- Quan sát khác biệt ở bytes scanned / columns read
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _Lưu ý: Dremel là tiền thân của Google BigQuery, Apache Drill và Trino (Presto)._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Dremel thay thế MapReduce cho các câu query Ad-hoc bằng **Execution Tree** (Cây thực thi), bắn query xuống hàng ngàn node cùng lúc. Nhưng vì nó không có cơ chế Fault-Tolerance ở cấp độ Task như MapReduce, nếu 1 node đang chạy mà sập, toàn bộ câu query đó phải chạy lại từ đầu. Nó đánh đổi sự bền bỉ lấy tốc độ sub-second.
+    
+2. **War Stories & Troubleshooting:** Lỗi kinh điển khi xài BigQuery/Trino: Một Junior gõ `SELECT * FROM log_table` mà quên thêm điều kiện `WHERE partition_date = ...`. Dremel sẽ quét toàn bộ Petabyte dữ liệu dạng Columnar, khiến công ty mất luôn hàng ngàn đô la chỉ trong 10 giây.
+    
+3. **Metrics & Order of Magnitude:** Dremel có thể xử lý hàng tỷ row trong vài giây nhờ thiết kế Nested Columnar. Thay vì làm phẳng data (Flatten), nó nén nguyên cấu trúc mảng (Array) và JSON xuống ổ cứng cực kỳ tối ưu.
+    
+4. **Micro-Lab:** Hiểu tư duy Nested Columnar của Dremel bằng cách tập dùng `UNNEST` trong SQL (cú pháp BigQuery/Trino) để phá vỡ các cột chứa mảng.
+
 ---
 
 ## 8. MEGASTORE - 2011
@@ -851,6 +1104,31 @@ sequenceDiagram
 - Bridge between Bigtable (scalable, no ACID) and Spanner (global ACID)
 - Entity group concept used in Cloud Datastore/Firestore
 - Influenced distributed transaction patterns
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Entity group write throughput hạn chế** do consensus scope nhỏ.
+- **Cross-group transaction phức tạp** và đắt.
+- **Evolution:** Spanner mở rộng transactional model toàn cục với SQL mạnh hơn.
+
+### War Stories & Troubleshooting
+- **Bad entity group design** gây contention và retry storm.
+- **Fix nhanh:** tách aggregate roots hợp lý, tránh gom quá nhiều write vào cùng group.
+
+### Metrics & Order of Magnitude
+- Local (single-group) tx nhanh hơn đáng kể so với cross-group.
+- Tỷ lệ retry tăng mạnh khi hotspot group bị write burst.
+- Latency đa DC phụ thuộc quorum path và placement.
+
+### Micro-Lab
+```python
+# Mô phỏng contention theo entity group
+from collections import Counter
+writes = ['groupA'] * 10000 + ['groupB'] * 500 + ['groupC'] * 300
+c = Counter(writes)
+print(c)
+print("groupA_share=", round(c['groupA'] / sum(c.values()), 4))
+```
+
 
 ---
 
@@ -953,6 +1231,36 @@ graph LR
 - **CockroachDB** — Similar SQL on distributed KV
 - **Online schema changes** — Pattern adopted by many databases (gh-ost, pt-osc)
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Hierarchical/interleaved schema** tối ưu locality nhưng có thể khóa chặt mô hình dữ liệu.
+- **Online schema change** vẫn cần backfill cost lớn trên bảng khổng lồ.
+- **Evolution:** online DDL frameworks, progressive rollout/backfill throttling.
+
+### War Stories & Troubleshooting
+- **Backfill quá nhanh** làm ảnh hưởng query prod.
+- **Fix nhanh:** throttle backfill, chạy theo window thấp tải, monitor replication lag + lock wait.
+
+### Metrics & Order of Magnitude
+- Online index build/backfill có thể chạy từ phút đến giờ/ngày tùy cardinality.
+- Co-location tốt giảm join latency rõ rệt cho access pattern theo tenant.
+- DDL rollout an toàn thường cần canary + staged validation.
+
+### Micro-Lab
+```sql
+-- Bước 1: additive change (nullable)
+ALTER TABLE campaign ADD COLUMN new_flag BOOL;
+
+-- Bước 2: backfill theo batch nhỏ (pseudo)
+UPDATE campaign SET new_flag = FALSE WHERE new_flag IS NULL;
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+>_Lưu ý: Hai paper này có tính lịch sử cao, là "vật tế thần" trước khi Spanner hoàn thiện._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Megastore cố gắng mang Transaction của SQL đắp lên trên Bigtable (dùng Paxos cho mọi lượt ghi). Hậu quả: Write latency tồi tệ, throughput cực thấp. F1 sinh ra để thay MySQL cho hệ thống Google Ads, nó giải quyết được việc scale out (mở rộng ngang) nhưng đọc 1 dòng dữ liệu bằng F1 chậm hơn gấp hàng chục lần so với MySQL truyền thống.
+    
+2. **War Stories & Troubleshooting:** Bài học ở đây là "Đừng ép một hệ thống NoSQL đóng giả thành RDBMS". Việc cố gắng code thêm một layer SQL phức tạp phía trên nền tảng Key-Value dẫn đến việc debug cực hình vì Query Plan không phản ánh đúng I/O thực tế dưới đĩa. Hiện tại, Spanner đã thay thế hoàn toàn kiến trúc chắp vá này.
 ---
 
 ## 10. BORG - 2015
@@ -1048,6 +1356,40 @@ graph TB
 - **Nomad** — HashiCorp's workload orchestrator
 - **Omega** — Google's next-gen after Borg (shared state)
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- **Centralized scheduler pressure** tăng mạnh ở scale cực lớn.
+- **Resource overcommit tuning khó**: sai là OOM kill hoặc underutilization.
+- **Evolution:** Kubernetes ecosystem + autoscaler + scheduler plugins, workload isolation tốt hơn.
+
+### War Stories & Troubleshooting
+- **Noisy neighbor** làm latency service production tăng.
+- **Fix nhanh:** tách node pool theo QoS, đặt requests/limits đúng, anti-affinity cho critical workloads.
+
+### Metrics & Order of Magnitude
+- Bin-packing tốt thường đẩy utilization cluster lên cao hơn đáng kể (thường +20-40% so với reserve cứng).
+- p99 scheduling latency cần theo dõi khi burst deployment.
+- Preemption rate tăng là tín hiệu overcommit sai hoặc priority policy chưa hợp lý.
+
+### Micro-Lab
+```bash
+# Check allocatable vs requested để bắt đầu debug noisy-neighbor
+kubectl top nodes
+kubectl describe node <node-name> | egrep "Allocatable|cpu|memory"
+# Quan sát pod requests/limits trên node đó
+kubectl get pods -A -o wide | grep <node-name>
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+>_Lưu ý: Tổ tiên của Kubernetes (K8s)._
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Kiến trúc tập trung của BorgMaster (giống Kube-apiserver) sẽ bị quá tải nếu số lượng worker node vượt qua con số hàng ngàn. Ngoài ra, việc học Kubernetes hiện tại để quản lý Data Platform là một Overkill (dùng dao mổ trâu giết gà) nếu team chỉ có 1-2 người, chi phí bảo trì K8s đôi khi lớn hơn cả lợi ích nó mang lại.
+    
+2. **War Stories & Troubleshooting:** Sự cố kinh hoàng nhất luôn là **"OOMKilled"** (Out Of Memory Killed) và **Eviction**. Lập trình viên không set chuẩn `limits` và `requests` cho CPU/RAM. Dẫn đến một con container xử lý data ăn sạch RAM của node vật lý (ví dụ ăn hết RAM của con máy trạm), khiến K8s hoảng loạn và kill hàng loạt các service hệ thống khác để sinh tồn.
+    
+3. **Metrics & Order of Magnitude:** Borg scheduling hàng trăm nghìn job mỗi ngày. Tuy nhiên độ trễ khi spin-up (khởi tạo) một container mới có thể mất từ vài giây đến vài phút nếu image lớn. Không bao giờ thiết kế hệ thống realtime phụ thuộc vào thời gian khởi tạo pod.
+    
+4. **Micro-Lab:** Hiểu cơ chế cấp phát tài nguyên bằng cách tạo một pod có giới hạn RAM: `kubectl run test-pod --image=nginx --requests=memory=64Mi --limits=memory=128Mi`
 ---
 
 ## 11. TỔNG KẾT & TIMELINE
@@ -1132,15 +1474,15 @@ graph TB
 
 ```mermaid
 graph LR
-    Start["Start Here"] --> GFS["1. GFS<br/>(foundation)"]
-    GFS --> MR["2. MapReduce<br/>(processing)"]
-    MR --> BT["3. Bigtable<br/>(storage)"]
-    BT --> Dynamo["4. Dynamo<br/>(availability)"]
-    Dynamo --> Chubby["5. Chubby<br/>(coordination)"]
-    Chubby --> Dremel["6. Dremel<br/>(analytics)"]
-    Dremel --> Spanner["7. Spanner<br/>(global DB)"]
-    Spanner --> F1["8. F1<br/>(SQL layer)"]
-    F1 --> Borg["9. Borg<br/>(orchestration)"]
+    Start["Start Here"] --> GFS["1\. GFS<br/>(foundation)"]
+    GFS --> MR["2\. MapReduce<br/>(processing)"]
+    MR --> BT["3\. Bigtable<br/>(storage)"]
+    BT --> Dynamo["4\. Dynamo<br/>(availability)"]
+    Dynamo --> Chubby["5\. Chubby<br/>(coordination)"]
+    Chubby --> Dremel["6\. Dremel<br/>(analytics)"]
+    Dremel --> Spanner["7\. Spanner<br/>(global DB)"]
+    Spanner --> F1["8\. F1<br/>(SQL layer)"]
+    F1 --> Borg["9\. Borg<br/>(orchestration)"]
 ```
 
 ---
@@ -1156,7 +1498,53 @@ graph LR
 | The Morning Paper | [blog.acolyer.org](https://blog.acolyer.org/) | Paper summaries (archive) |
 
 ---
+<mark style="background: #BBFABBA6;">💡 **Gemini Message**</mark>
+Từ sau 2015 trở đi, giới công nghệ không "phát minh lại bánh xe" nữa, mà họ lấy những viên gạch đó xây lên các **Hệ sinh thái Cloud-Native** và **Tách rời kiến trúc**.
 
+Thực tế, các paper từ 2015 - 2026 đã được người soạn tài liệu chia nhỏ rải rác sang các file khác (02, 03, 04, 07...). Nếu hệ thống lại bức tranh Data Engineering 10 năm đổ lại đây dưới góc nhìn kiến trúc, đây là những gì đã diễn ra:
+
+### 1. Kỷ nguyên Tách rời (Compute-Storage Separation) (2015 - 2018)
+
+Thời Hadoop (trước 2015), Storage và Compute nằm chung trên một máy. Nếu hết dung lượng, em phải mua cả CPU lẫn RAM đi kèm ổ cứng, cực kỳ lãng phí.
+
+- **Sự thật phũ phàng:** Kiến trúc này quá cồng kềnh và đắt đỏ.
+
+- **Kẻ thay đổi cuộc chơi:** **Snowflake (2016 Paper - Nằm ở file 03)** và **Amazon Aurora (2017 Paper)**. Chúng xé toạc Compute và Storage ra.
+
+- **💡 Góc nhìn thực chiến:** Nếu em đang tự tay dựng một Data Platform từ những server secondhand (như việc ghép các con máy trạm HP Z440 lại với nhau), em sẽ thấy kiến trúc hiện đại này cứu rỗi túi tiền thế nào. Em có thể dùng ổ cứng giá rẻ (như MinIO/S3) làm Storage dùng chung, và chỉ bật các node CPU (Compute) lên khi nào cần chạy job nặng, chạy xong thì tắt đi. Đây là khái niệm _Multi-tenancy_ và _Elasticity_ cốt lõi của thập kỷ này.
+
+
+### 2. Kỷ nguyên Lakehouse & Format Wars (2017 - 2021)
+
+S3/Object Storage quá rẻ, nhưng nó bị "mù" (không có ACID transaction như Database).
+
+- **Sự thật phũ phàng:** Dữ liệu ném lên S3 biến thành một bãi lầy (Data Swamp), đụng ai người nấy ghi đè, hỏng hóc không biết đường nào mà lần.
+
+- **Kẻ thay đổi cuộc chơi:** Sự ra đời của các Open Table Formats như **Apache Iceberg (2017 - Netflix)** và **Delta Lake (2020 - Databricks)** (Nằm ở file 04). Chúng mang Transaction, Time-travel, và Schema Evolution của Database truyền thống áp lên trên các file Parquet vô tri nằm dưới S3.
+
+
+### 3. Kỷ nguyên Phân quyền & Quản trị (Decentralization) (2019 - 2022)
+
+Khi mọi công ty đều có Data Lakehouse khổng lồ, một team Data Centralized (tập trung) không thể nào gánh nổi việc dọn rác cho cả tập đoàn.
+
+- **Sự thật phũ phàng:** Data Engineer biến thành "thợ sửa ống nước", suốt ngày đi fix lỗi data từ team Sale, team Marketing đẩy sang.
+
+- **Kẻ thay đổi cuộc chơi:** Kiến trúc **Data Mesh (2019 - Zhamak Dehghani)** (Nằm ở file 07). Nó không phải là một công nghệ, mà là một cú xoay trục về tổ chức: Trả data về cho các domain (phòng ban) tự quản lý, coi dữ liệu như một "Product", kèm theo khái niệm **Data Contracts** (2022).
+
+
+### 4. Kỷ nguyên Agentic & AI-Infused Platforms (2023 - 2026)
+
+Hệ thống không còn chỉ phục vụ BI Dashboard hay Machine Learning truyền thống nữa.
+
+- **Sự thật phũ phàng:** Các Data Warehouse truyền thống quá cứng nhắc để xử lý hàng tỷ unstructured text/pdf cho GenAI.
+
+- **Kẻ thay đổi cuộc chơi:** Sự bùng nổ của **Vector Databases** (Milvus, Qdrant) và các nền tảng phân tán phục vụ Python/AI workflow như **Ray (2017 - UC Berkeley)**. Hệ thống dữ liệu bắt đầu tích hợp LLM sâu vào bên trong để tự động hóa việc thu thập, dọn dẹp và theo dõi chất lượng.
+
+
+**Tóm lại:** File `01_Distributed_Systems` kết thúc ở 2015 vì nó hoàn thành sứ mệnh cung cấp "Nền móng vật lý". Nếu em nắm chắc những nguyên lý ngầm về bộ nhớ, network, consensus trước 2015 ở file 01, thì việc em tiếp cận các công cụ hào nhoáng từ 2015 đến 2026 ở các file sau chỉ là chuyện đọc Docs trong vài giờ, vì bản chất chúng chỉ là những "lớp bọc" (abstractions) thông minh hơn mà thôi!
+
+
+---
 ## 🔗 Liên Kết Nội Bộ
 
 - [[05_Consensus_Papers|Consensus Papers]] — Paxos, Raft deep dive
@@ -1170,3 +1558,5 @@ graph LR
 *Document Version: 2.0*
 *Last Updated: February 2026*
 *Coverage: GFS, MapReduce, Bigtable, Dynamo, Chubby, Spanner, Dremel, Megastore, F1, Borg*
+
+

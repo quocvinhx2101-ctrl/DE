@@ -140,6 +140,40 @@ graph TD
 - **Redpanda** — Kafka-compatible, C++ implementation
 - **Confluent** — Commercial Kafka platform
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Kafka **không phải stream processor hoàn chỉnh**: cần thêm engine để xử lý stateful/window phức tạp.
+- Rebalance + partition skew có thể làm p99 latency tăng mạnh.
+- **Evolution:** Kafka Streams, Flink, Pulsar Functions và ksqlDB để lấp khoảng trống processing layer.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **consumer lag tăng không hồi**, thường do downstream chậm hoặc key skew.
+- Fix nhanh: scale consumer group theo partition, tăng `fetch.min.bytes`/batch hợp lý, tách hot key bằng re-key/bucketing.
+
+### Metrics & Order of Magnitude
+- End-to-end pipeline Kafka thường mục tiêu p99 ở mức **10ms đến vài trăm ms** tùy processing phía sau.
+- Compression (`lz4`/`zstd`) thường giảm network + storage đáng kể (thường 2-5x với log text).
+- Partition count là đòn bẩy throughput chính nhưng tăng quá mức sẽ tăng metadata/control overhead.
+
+### Micro-Lab
+```bash
+# 1) Tạo topic lab
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic lag-lab --partitions 3 --replication-factor 1
+# 2) Theo dõi lag theo consumer group
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group demo-g --describe
+# 3) Produce burst nhỏ rồi quan sát lag tăng/giảm
+kafka-console-producer.sh --bootstrap-server localhost:9092 --topic lag-lab
+```
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Bản chất Kafka chỉ là một cái "ống nước" (Dumb broker, Smart consumer) chuyên ghi tuần tự ra đĩa, chứ không có năng lực tính toán (Map/Reduce). Sai lầm lớn nhất của Junior là coi Kafka như một Database để query data cũ. Sự tiến hóa sau này là KSQL và Kafka Streams ra đời để đắp thêm não (Compute) cho cái ống nước vô tri này.
+    
+2. **War Stories & Troubleshooting:** Ác mộng kinh hoàng nhất với Kafka là **"Consumer Rebalance Storm"**. Khi một node app của em bị đơ (CPU spike) và không gửi `heartbeat` về cho Kafka kịp, Kafka tưởng node đó chết nên thu hồi Partition và chia lại cho các node khác. Cả quá trình này (Rebalance) làm toàn bộ consumer group bị "đứng hình" không xử lý được message nào, gây lag nghẽn hệ thống hàng chục phút. Cách fix: Tách riêng thread xử lý logic và thread gửi heartbeat, tăng `session.timeout.ms`.
+    
+3. **Metrics & Order of Magnitude:** Đừng sợ Kafka ghi ra ổ cứng. Do nó dùng cơ chế OS PageCache và Sequential I/O, tốc độ ghi disk của Kafka có thể đạt hàng trăm MB/s, tức là xử lý hàng triệu message mỗi giây trên một node bình thường.
+    
+4. **Micro-Lab:** Chạy Kafka local và tự tay trải nghiệm việc gửi/nhận message qua terminal để hiểu khái niệm topic: `docker run -p 9092:9092 apache/kafka:3.7.0` (Sau đó dùng `kafka-console-producer.sh` và `kafka-console-consumer.sh`)
 ---
 
 ## 2. DATAFLOW MODEL - 2015
@@ -271,6 +305,32 @@ from apache_beam.transforms.trigger import AfterWatermark, AfterCount, Accumulat
 - **Apache Spark Structured Streaming** — Influenced by Dataflow
 - **Kafka Streams** — Window semantics from Dataflow
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Event-time correctness rất mạnh nhưng **mental model khó** cho team mới (trigger + lateness + accumulation).
+- Cấu hình sai watermark/allowed lateness dễ tạo kết quả "đúng lý thuyết nhưng sai nghiệp vụ".
+- **Evolution:** runner/tooling hiện đại thêm observability cho watermark, late data và state growth.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **late data bị drop** vì watermark quá aggressive.
+- Fix nhanh: tăng `allowed_lateness`, phát side output cho late events, audit clock skew ở nguồn event.
+
+### Metrics & Order of Magnitude
+- Watermark lag thực tế thường từ **vài giây đến vài phút** tùy nguồn dữ liệu.
+- Trigger early giúp latency xuống sub-minute nhưng tăng số lần emit/state update.
+- Chi phí compute tăng theo số lần firing và độ trễ chấp nhận cho late data.
+
+### Micro-Lab
+```sql
+-- Kiểm tra tỷ lệ late events theo phút
+SELECT
+    window_start,
+    COUNTIF(is_late) / COUNT(*) AS late_ratio,
+    COUNT(*) AS total_events
+FROM stream_metrics
+GROUP BY window_start
+ORDER BY window_start DESC;
+```
+
 ---
 
 ## 3. FLINK (LIGHTWEIGHT ASYNCHRONOUS SNAPSHOTS) - 2015
@@ -379,8 +439,37 @@ graph TD
 - **Standard** — For exactly-once stream processing
 - **Flink CDC** — Change data capture using same engine
 
----
+### Limitations & Evolution (Sự thật phũ phàng)
+- Aligned checkpoint có thể gây **checkpoint stalls** khi backpressure nặng.
+- State lớn làm checkpoint duration phình to và recovery chậm.
+- **Evolution:** unaligned checkpoint, incremental checkpoint, disaggregated state backends.
 
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **checkpoint timeout** và job restart loop.
+- Fix nhanh: tăng timeout + min pause, giảm state TTL/size, chuyển RocksDB incremental + tune I/O storage.
+
+### Metrics & Order of Magnitude
+- Checkpoint interval thường ở **10s-5m** tùy SLA và cost.
+- State backend lớn có thể đẩy recovery từ giây lên phút nếu thiếu incremental snapshot.
+- Backpressure kéo dài làm alignment time tăng theo bậc.
+
+### Micro-Lab
+```bash
+# Kiểm tra checkpoint metrics (Flink REST)
+curl -s http://localhost:8081/jobs/<job_id>/checkpoints | jq '.latest'
+# Xem thêm trạng thái backpressure để correlate với checkpoint timeout
+curl -s http://localhost:8081/jobs/<job_id>/vertices/<vertex_id>/backpressure | jq
+```
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Thuật toán Chandy-Lamport giúp Flink có Exactly-Once. Nhưng điểm yếu chí mạng là **State Bloat (Phình to trạng thái)**. Nếu em dùng Flink để JOIN 2 luồng data khổng lồ mà quên không cấu hình TTL (Time To Live), Flink sẽ lưu toàn bộ lịch sử data vào RocksDB (ổ cứng) mãi mãi cho đến khi sập ổ đĩa.
+    
+2. **War Stories & Troubleshooting:** **"Checkpoint Timeout"** là lỗi Junior hay khóc thét nhất. Khi Job Flink có một Task bị Data Skew (nghiêng data), Task đó sẽ bận đến mức không kịp nhận cái thẻ "Barrier" của thuật toán Chandy-Lamport để chụp hình (snapshot). Kết quả là Checkpoint bị quá giờ (timeout) liên tục, hệ thống mất khả năng chịu lỗi. Khi Flink chết, nó phải đọc lại data từ rất xa trong quá khứ, tạo ra một vòng lặp chết chóc (Restart Loop).
+    
+3. **Metrics & Order of Magnitude:** Một Checkpoint của Flink có thể nặng từ vài chục MB đến hàng Terabyte. Nếu Checkpoint size > 1GB, bắt buộc phải xài Incremental Checkpoint (chỉ lưu phần thay đổi) với RocksDB StateBackend.
+
+---
 ## 4. MILLWHEEL - 2013
 
 ### Paper Info
@@ -482,6 +571,41 @@ graph TB
 - **Apache Flink** — Many similar concepts (watermarks, timers)
 - **Watermark concept** — Now standard in all streaming systems
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Kiến trúc phụ thuộc strongly-consistent state store nên **ops complexity cao**.
+- Exactly-once mạnh nhưng đổi lại latency/cost cho transactional state.
+- **Evolution:** managed streaming services tối giản vận hành state + checkpoint.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **timer explosion** (quá nhiều timer per key) gây OOM.
+- Fix nhanh: coarsen timer granularity, TTL state, gộp key và giới hạn cardinality upstream.
+
+### Metrics & Order of Magnitude
+- Cardinality key tăng 10x thường kéo state size gần tuyến tính nếu không TTL.
+- Exactly-once pipeline thường có overhead đáng kể so với at-least-once.
+- Watermark health là leading indicator cho freshness SLA.
+
+### Micro-Lab
+```python
+# Ước lượng state footprint thô
+num_keys, bytes_per_key = 5_000_000, 200
+print(f"state ~ {num_keys*bytes_per_key/1024/1024:.1f} MB")
+# Thử thêm replication/checkpoint overhead đơn giản
+overhead_factor = 1.5
+print(f"effective_storage ~ {num_keys*bytes_per_key*overhead_factor/1024/1024:.1f} MB")
+```
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> *Lưu ý : Hai paper này là linh hồn của Apache Beam và Google Cloud Dataflow, em có thể gộp chung góc nhìn*
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Dataflow Model đẻ ra khái niệm **Watermark** để xử lý Late Data (dữ liệu đến trễ). Nhưng trên thực tế, cấu hình Watermark cực kỳ trừu tượng và khó debug. Rất nhiều team từ bỏ Beam vì code pipeline quá cồng kềnh và khó viết unit test so với Spark.
+    
+2. **War Stories & Troubleshooting:** Lỗi **"Watermark Hold"**. Hệ thống của em đang chạy ngon 100.000 msg/s, tự nhiên output ngưng bặt, không ra một dòng data nào dù CPU vẫn chạy. Check log mới thấy có MỘT thiết bị IoT ở vùng sâu vùng xa bị mất mạng, giờ nó gửi bù data của 3 ngày trước. Cả hệ thống Windowing phải "nín thở" giữ state trên RAM để chờ thằng đó chốt sổ, dẫn đến tràn RAM (OOM). Cách fix: Cấu hình `allowedLateness` chuẩn và thiết lập Drop Late Data cứng rắn.
+    
+3. **Metrics & Order of Magnitude:** Trễ (Latency) trong Dataflow phụ thuộc vào Window size. Nếu em mở Fixed Window 5 phút, data sẽ bị om đúng 5 phút mới nhả ra, trừ khi em xài cơ chế Early Triggers (nhả data mồi liên tục).
+
 ---
 
 ## 5. STORM - 2014
@@ -517,12 +641,14 @@ graph LR
         
         Spout1 -->|shuffle| Bolt1
         Spout2 -->|shuffle| Bolt1
-        Bolt1 -->|fields(word)| Bolt3
+        Bolt1 -->|"fields(word)"| Bolt3
         Bolt1 -->|shuffle| Bolt2
         Bolt2 -->|shuffle| Bolt4
-        Bolt3 -->|fields(word)| Bolt4
+        Bolt3 -->|"fields(word)"| Bolt4
         Bolt4 -->|global| Bolt5
     end
+    style Spout1 fill:#fff9c4,stroke:#fbc02d
+style Bolt1 fill:#e1f5fe,stroke:#0288d1
 ```
 
 ### Stream Groupings
@@ -574,6 +700,34 @@ graph TB
 - Pioneered real-time processing for industry
 - Largely replaced by Flink and Spark Structured Streaming
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- At-least-once + ack tree khiến debug semantics phức tạp ở topology lớn.
+- Ecosystem/state management kém linh hoạt hơn thế hệ mới.
+- **Evolution:** Heron, Flink và Structured Streaming với model state/checkpoint tốt hơn.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **topology backpressure** nhưng không rõ bolt nào nghẽn.
+- Fix nhanh: tăng parallelism đúng bolt, đổi grouping phù hợp key distribution, giảm per-tuple processing time.
+
+### Metrics & Order of Magnitude
+- Per-record latency thấp nhưng tail latency nhạy với skew và external sink.
+- Ack timeout sai dễ gây replay storm.
+- Throughput thường scale theo số executors cho tới khi chạm bottleneck network/sink.
+
+### Micro-Lab
+```bash
+# Kiểm tra topology đang chạy
+storm list
+# Lấy thông tin chi tiết 1 topology để tìm bolt nghẽn
+storm topology <topology-name>
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Storm là ông tổ của Streaming nhưng hiện tại **ĐÃ CHẾT**. Nó xử lý từng event một (Tuple-at-a-time) nên latency cực thấp (dưới 10ms), nhưng throughput thê thảm và KHÔNG hỗ trợ Exactly-once state management natively (Trident quá phức tạp). Hiện nay, Flink đã hoàn toàn thay thế Storm.
+    
+2. **War Stories & Troubleshooting:** Ngày xưa dùng Storm, hễ Worker bị sập là y như rằng data bị tính đúp (duplicate) vào Database (At-least-once). Developer phải tự code phần logic chống trùng lặp (Idempotent) ở phía Database cực kỳ khổ sở. Thấy chữ Storm trong CV bây giờ thì chỉ mang tính chất hoài niệm lịch sử.
 ---
 
 ## 6. SPARK STREAMING - 2013
@@ -668,8 +822,41 @@ graph LR
 - **Spark Structured Streaming** — SQL-based evolution (active)
 - Micro-batch model: simple but higher latency trade-off
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Micro-batch tạo floor latency, khó đạt ultra-low-latency use case.
+- State và trigger semantics thế hệ DStreams khó maintain.
+- **Evolution:** Structured Streaming + AQE + better state store internals.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **batch backlog tăng dần** (processing time > batch interval).
+- Fix nhanh: tăng batch interval, optimize stateful ops, autoscale executors và giảm wide shuffles.
+
+### Metrics & Order of Magnitude
+- Batch interval thường từ **100ms đến vài giây** tùy SLA.
+- Khi input rate vượt process rate liên tục, latency tăng tuyến tính theo backlog depth.
+- Checkpoint interval quá ngắn làm tăng I/O overhead đáng kể.
+
+### Micro-Lab
+```python
+# Ước lượng backlog growth đơn giản
+in_rate, proc_rate = 120000, 100000
+print("lag/s:", in_rate - proc_rate)
+# Ước lượng lag sau 10 phút nếu không scale
+seconds = 600
+print("lag_after_10m:", (in_rate - proc_rate) * seconds)
+```
+
 ---
 
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Spark Streaming (DStream) là **"Hàng giả mạo" (Micro-batch)**. Nó không thực sự xử lý real-time từng event, mà nó cắt data thành từng cục nhỏ (ví dụ 1 giây 1 cục) rồi xử lý như batch. Do đó, em vĩnh viễn không bao giờ đạt được độ trễ dưới 100ms với Spark. Sau này Databricks phải đẻ ra Structured Streaming và Continuous Processing để gỡ gạc nhưng vẫn không mượt bằng kiến trúc thuần stream của Flink.
+    
+2. **War Stories & Troubleshooting:** Lỗi kinh điển: `Processing Time > Batch Interval`. Nếu em cấu hình gom data mỗi 2 giây, nhưng logic tính toán của em tốn 3 giây để hoàn thành. Các cục batch phía sau sẽ bị xếp hàng chờ (Queuing), tích tụ dần dần cho đến khi vỡ nợ (OOM - Out of Memory) toàn bộ cụm Spark. Cách fix: Tối ưu lại logic hoặc tăng Batch Interval lên.
+    
+3. **Metrics & Order of Magnitude:** Latency an toàn của Spark Streaming thường ở mức 500ms - 2s. Tuyệt đối không dùng Spark Streaming cho các bài toán High-Frequency Trading (giao dịch chứng khoán tính bằng micro-second).
+
+---
 ## 7. SAMZA - 2017
 
 ### Paper Info
@@ -755,6 +942,29 @@ sequenceDiagram
 - **Apache Samza** — LinkedIn's stream processor
 - **Kafka Streams** — Adopted changelog pattern
 - Influenced stateful streaming designs
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Gắn chặt Kafka/YARN ecosystem nên portability hạn chế.
+- Host affinity tốt cho recovery nhưng gây khó autoscaling linh hoạt.
+- **Evolution:** Kafka Streams/Flink với runtime linh hoạt hơn trên Kubernetes.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **recovery rất chậm** khi task chuyển host (replay full changelog).
+- Fix nhanh: giữ host affinity, giảm changelog noise (compaction), snapshot state định kỳ.
+
+### Metrics & Order of Magnitude
+- Same-host recovery thường nhanh hơn khác host theo bậc nhiều lần.
+- Changelog topic growth là chỉ số sớm cho chi phí recovery tương lai.
+- RocksDB local state giúp read latency ổn định ở mức thấp.
+
+### Micro-Lab
+```bash
+# Quan sát tốc độ tăng changelog topic
+kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9092 --topic app-changelog
+# Chạy lại sau 1-2 phút để so sánh delta offsets
+kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9092 --topic app-changelog
+```
+
 
 ---
 
@@ -874,6 +1084,38 @@ source
 - **ksqlDB** — SQL layer on Kafka Streams
 - Pattern: stream processing as library (no separate cluster)
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Library model đơn giản nhưng **ops phân tán** theo từng app instance.
+- Rebalance và state restore có thể làm startup/redeploy chậm.
+- **Evolution:** ksqlDB cho SQL-first ops, cooperative rebalancing giảm disruption.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: **rebalance storm** khi deploy rolling sai cách.
+- Fix nhanh: cooperative sticky assignor, graceful shutdown, warm-up state store trước cutover.
+
+### Metrics & Order of Magnitude
+- State restore time tỉ lệ mạnh với kích thước changelog.
+- EOS transaction overhead thường đổi lấy correctness ở workload tài chính/ordering-critical.
+- p99 processing latency phụ thuộc nhiều vào RocksDB compaction health.
+
+### Micro-Lab
+```java
+// Bật exactly-once-v2
+props.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
+props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, "2");
+props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, "100");
+// Chạy app và verify output topic không bị duplicate khi restart
+```
+
+
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Kafka Streams không phải là một Cluster to nạc như Spark/Flink, nó chỉ là một cái **Java Library (Thư viện)** nhúng thẳng vào file `.jar` chạy app của em. Rất dễ deploy, nhưng nhược điểm là nó "trói chặt" mạng sống vào Kafka. Em không thể dùng Kafka Streams để đọc data từ RabbitMQ hay ghi thẳng ra S3 một cách mượt mà được.
+    
+2. **War Stories & Troubleshooting:** Kafka Streams lưu trạng thái (State) ở ổ cứng local bằng RocksDB và backup lên Kafka qua một topic ẩn gọi là `changelog`. Khi app của em bị sập đĩa và khởi động lại ở một node mới, nó phải kéo toàn bộ data từ topic `changelog` về để khôi phục RocksDB. Quá trình này có thể tốn vài tiếng đồng hồ cho các state vài chục GB, làm gián đoạn dịch vụ cực lâu.
+
 ---
 
 ## 9. ONE SQL TO RULE THEM ALL - 2019
@@ -968,8 +1210,42 @@ JOIN users_table FOR SYSTEM_TIME AS OF e.event_time u
 - **Spark Structured Streaming SQL** — Spark's implementation
 - Standard for streaming SQL syntax
 
----
+### Limitations & Evolution (Sự thật phũ phàng)
+- Unified SQL semantics mạnh nhưng **khác biệt engine runtime** vẫn tồn tại.
+- SQL che bớt complexity nhưng không xóa vấn đề state/watermark/backpressure.
+- **Evolution:** chuẩn hóa planner (Calcite) + engine-specific optimizer/adaptive runtime.
 
+### War Stories & Troubleshooting
+- Lỗi phổ biến: cùng SQL nhưng output lệch giữa engines do timezone/watermark defaults.
+- Fix nhanh: chuẩn hóa session configs (timezone, lateness, null semantics), thêm regression test cross-engine.
+
+### Metrics & Order of Magnitude
+- SQL abstraction tăng velocity đội Data/Analytics nhưng cần guardrail cho cost/perf.
+- Windowed join thường là điểm nóng CPU/state; cardinality tăng làm cost tăng phi tuyến.
+- Planner quality quyết định lớn tới bytes shuffled và latency.
+
+### Micro-Lab
+```sql
+-- Sanity check semantic: event-time watermark và window count
+SELECT
+    TUMBLE_START(ts, INTERVAL '1' MINUTE) AS w,
+    COUNT(*) AS c
+FROM s
+GROUP BY TUMBLE(ts, INTERVAL '1' MINUTE)
+ORDER BY w;
+```
+
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Ý tưởng dùng chung một cú pháp SQL cho cả Batch (data tĩnh) và Stream (data chảy liên tục) là giấc mơ đẹp của Flink. Nhưng thực tế, Streaming SQL cực kỳ khó debug. Khi em `JOIN` hai luồng stream với nhau, nếu kết quả ra sai, em gần như không thể dùng `println` để xem data bên trong nó đang chạy thế nào vì mọi thứ bị giấu sau lớp abstraction của Engine.
+    
+2. **War Stories & Troubleshooting:** Junior viết Flink SQL rất hay quên khái niệm **"Retraction" (Thu hồi)**. Stream SQL không chỉ tạo ra data mới (INSERT), mà khi update, nó bắn ra lệnh thu hồi data cũ (-UPDATE) và phát ra data mới (+UPDATE). Nếu cái Sink đầu ra (ví dụ Kafka) không hiểu lệnh thu hồi này, dữ liệu cuối cùng hiển thị trên Dashboard sẽ bị sai lệch hoàn toàn.
+    
+3. **Micro-Lab:** Để hiểu Streaming SQL, hãy tải Flink SQL Client về, tạo một bảng mô phỏng luồng click chuột từ `datagen` (dữ liệu rác tự sinh) và gõ lệnh `SELECT count(*), window_start FROM table GROUP BY TUMBLE(time, INTERVAL '10' SECONDS)` để thấy kết quả nháy liên tục trên màn hình.
+
+---
 ## 10. TỔNG KẾT & EVOLUTION
 
 ### Timeline
@@ -1051,7 +1327,47 @@ graph TB
 | Papers We Love | [papers-we-love/papers-we-love](https://github.com/papers-we-love/papers-we-love) | 90k⭐ Paper discussions |
 
 ---
+<mark style="background: #BBFABBA6;">💡 **Gemini Message**</mark>
+Đúng là từ sau năm 2019 (với paper _One SQL to Rule Them All_ của Flink), mảng Stream Processing dường như không có thêm một "Framework" cốt lõi nào mang tính lật đổ như cách Spark/Flink từng làm.
 
+Nhưng không có nghĩa là công nghệ này dậm chân tại chỗ. Từ 2019 đến 2026, cuộc chơi Streaming đã chuyển sang một "hình thái" hoàn toàn khác. Thay vì đẻ thêm Framework tính toán, giới kỹ thuật tập trung vào **Streaming Databases**, **Tích hợp Data Lake** và **Trải nghiệm Developer (DX)**.
+
+Dưới đây là bức tranh tiến hóa của Stream Processing từ 2019 - 2026 mà em có thể note lại, nó sẽ cực kỳ hữu ích khi em thiết kế kiến trúc cho các dự án tự build như Data-Keeper:
+
+**(1) Kỷ nguyên của Streaming Databases (2020 - nay)**
+
+- **Sự thật phũ phàng:** Flink hay Kafka Streams tính toán rất giỏi, nhưng chúng KHÔNG PHẢI LÀ DATABASE. Em không thể cắm trực tiếp một cái BI Dashboard hay API vào Flink để query được. Phải đẩy data kết quả ra một hệ thống thứ 3 (như Postgres hay Redis) cực kỳ cồng kềnh.
+
+- **Kẻ thay đổi cuộc chơi:** Sự bùng nổ của **Materialize (2020)** và **RisingWave (2022)**. Chúng là các cơ sở dữ liệu sinh ra cho streaming. Em đẩy thẳng data từ Kafka vào, gõ SQL tạo `MATERIALIZED VIEW`, và database sẽ tự động update view đó real-time ở dưới nền tảng (dùng Incremental Computation). Sau đó em cắm thẳng API vào đọc bảng view đó. Nhanh, gọn, lẹ.
+
+
+**(2) Real-time OLAP "Xưng vương" (2021 - nay)**
+
+- Khi phần cứng (như các dòng máy trạm HP Z440 với CPU nhiều nhân) ngày càng rẻ và SSD NVMe ngày càng nhanh, việc dùng sức mạnh "cơ bắp" để quét dữ liệu thay vì phải maintain luồng stream phức tạp trở nên khả thi.
+
+- **Kẻ thay đổi cuộc chơi:** **ClickHouse**, **Apache Pinot**, **Apache Druid**. Thay vì hì hục code Flink để tính tổng số sự kiện trong 5 phút, em cứ xả raw data thẳng vào ClickHouse. Với khả năng Vectorized Execution siêu việt, nó quét hàng tỷ dòng trong vài chục millisecond. Kiến trúc lúc này siêu tối giản: `Kafka -> ClickHouse -> Dashboard`, bỏ qua luôn lớp Flink ở giữa cho các bài toán Aggregation cơ bản.
+
+
+**(3) Streaming gặp gỡ Data Lakehouse (2022 - 2026)**
+
+- **Sự thật phũ phàng:** Ghi data liên tục (streaming) vào S3/MinIO bằng Parquet là một thảm họa vật lý vì nó sinh ra hàng vạn file dung lượng vài KB (Small File Problem), làm sập NameNode hoặc tốn chi phí API call khổng lồ.
+
+- **Kẻ thay đổi cuộc chơi:** **Apache Paimon (2023)** (được nhắc ở file 04) ra đời chuyên trị bài toán "Streaming Data Lake". Nó tích hợp cực sâu với Flink, cho phép ghi data real-time thẳng xuống Object Storage với kiến trúc LSM-Tree mà không sợ nát file metadata. Các format khác như Iceberg v2/v3 (với Deletion Vectors) hay Delta Live Tables cũng lao vào giải quyết triệt để nỗi đau này.
+
+
+**(4) Real-time AI & RAG (2024 - 2026)**
+
+- Khi AI bùng nổ, việc có data sạch và mới nhất là yếu tố sống còn cho các hệ thống Agent. Nếu data bị trễ 1 ngày, con AI sẽ lấy thông tin cũ để trả lời (Hallucination).
+
+- **Kẻ thay đổi cuộc chơi:** Các luồng streaming hiện tại được dùng để làm **Real-time RAG**. Các công cụ streaming native bằng Python (như Bytewax, Quix, hoặc Flink Python API) được ưa chuộng. Cứ có một tài liệu hay log mới sinh ra, pipeline sẽ tự động chạy real-time để chia nhỏ (chunk), biến thành vector (embed) và cập nhật thẳng vào Vector Database, giúp AI có "ký ức" được update theo từng giây.
+
+
+**Tóm lại:** Nếu 2011-2019 là kỷ nguyên **"Xây dựng nhà máy nước"** (tạo ra các đường ống Kafka, máy bơm Flink to nạc), thì 2019-2026 là kỷ nguyên **"Sản xuất nước đóng chai"** (đóng gói mọi sức mạnh đó vào Streaming DBs, Cloud Serverless, hoặc giấu nhẹm đi bằng SQL).
+
+Do đó, giới học thuật sẽ không viết paper về việc tạo ra một cái ống nước mới nữa, mà họ chuyển sang viết về cách làm sao để tích hợp dòng nước đó thẳng vào Database, Data Lake và AI một cách vô hình nhất!
+
+
+---
 ## 🔗 Liên Kết Nội Bộ
 
 - [[01_Distributed_Systems_Papers|Distributed Systems Papers]] — Foundation papers

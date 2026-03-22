@@ -208,6 +208,28 @@ graph TD
 - **Oracle** — Advanced cost-based optimizer
 - **ALL modern RDBMS** — Direct descendant of System R
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Cost model chỉ tốt khi stats đủ mới và đủ sâu.
+- Cardinality estimation sai có thể làm optimizer chọn plan tệ hàng chục lần.
+- **Evolution:** richer statistics, adaptive re-optimization, feedback-driven planning.
+
+### War Stories & Troubleshooting
+- Triệu chứng: query chạy nhanh hôm qua, chậm hôm nay sau data skew/load mới.
+- Cách xử lý: refresh statistics, kiểm tra histogram/NDV, so sánh estimated vs actual rows.
+
+### Metrics & Order of Magnitude
+- Estimation error ratio (actual/estimated rows) là KPI cốt lõi của optimizer.
+- Plan regression count theo release giúp bắt drift sớm.
+- p95 query latency thường tăng mạnh khi join order sai ở query lớn.
+
+### Micro-Lab
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM orders o
+JOIN customers c ON o.customer_id = c.id
+WHERE o.created_at >= current_date - interval '7 day';
+```
+
 ---
 
 ## 2. VOLCANO/CASCADES OPTIMIZER - 1995
@@ -356,8 +378,46 @@ graph LR
 - **CockroachDB** — Cascades-style optimizer
 - **Apache Calcite** — Rule-based optimizer inspired by Cascades
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Rule explosion dễ làm search space phình rất nhanh.
+- Framework mạnh nhưng tuning rule priority/costing khá khó.
+- **Evolution:** memo pruning tốt hơn, property-driven search, modular rule packs.
+
+### War Stories & Troubleshooting
+- Triệu chứng: optimizer timeout hoặc planning time quá cao.
+- Cách xử lý: giới hạn exploration depth, thêm heuristics cắt nhánh, cache subplans quan trọng.
+
+### Metrics & Order of Magnitude
+- Planning time vs execution time cần cân bằng theo workload.
+- Số expressions/groups trong MEMO phản ánh độ bùng nổ search space.
+- Rule fire count bất thường là tín hiệu cấu hình chưa tối ưu.
+
+### Micro-Lab
+```text
+Checklist planner debugging:
+1) Ghi planning time
+2) Đếm số rule applications
+3) So sánh plan cost trước/sau bật rule set mới
+```
+
 ---
 
+> 💡 **Gemini Feedback**
+> 1. SYSTEM R OPTIMIZER (1979) & 2. VOLCANO/CASCADES (1995)
+
+_(Gộp chung vì đây là nền móng của mọi bộ tối ưu hóa CBO - Cost Based Optimizer)_
+
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> 
+> 1. **Limitations & Evolution (Sự thật phũ phàng):** Bộ tối ưu hóa dựa trên chi phí (CBO) của System R hay Cascades hoạt động dựa trên một giả định ngây thơ: "Số liệu thống kê (Statistics) luôn đúng". Sự thật là, nếu em không chạy lệnh `ANALYZE` để đếm lại số row trong bảng, CBO sẽ bị mù. Nó sẽ tưởng bảng 1 tỷ dòng chỉ có 100 dòng, và quyết định dùng thuật toán `Nested Loop Join` thay vì `Hash Join`. Kết quả là câu query treo đến sáng hôm sau.
+>     
+> 2. **War Stories & Troubleshooting:** Lỗi **"Join Order Explosion"**. Khi em `JOIN` 10 bảng với nhau, Cascades Optimizer sẽ cố gắng sinh ra hàng triệu cây thực thi (Execution Trees) khác nhau để tìm ra đường đi rẻ nhất. Hậu quả là bản thân quá trình "lập kế hoạch" (Planning) tốn mất 10 phút, làm cạn kiệt RAM của Master Node, trong khi chạy query thực tế chỉ mất 5 giây. Cách fix: Ép Database dừng tìm kiếm bằng cách dùng hint `/*+ STRAIGHT_JOIN */` hoặc giới hạn `join_collapse_limit`.
+>     
+> 3. **Metrics & Order of Magnitude:** B-Tree Index chỉ hiệu quả nếu câu truy vấn của em lọc ra **dưới 10%** tổng số dữ liệu của bảng. Nếu em `SELECT` mà trả về 20% dữ liệu, CBO sẽ đủ thông minh để bỏ qua Index và chọn `Full Table Scan` vì đọc tuần tự ổ cứng (Sequential Read) lúc này còn nhanh hơn là nhảy lộn xộn tìm Index (Random Read).
+>     
+> 4. **Micro-Lab:** Thử viết một câu query chạy cực chậm trên Postgres, gõ chữ `EXPLAIN ANALYZE` lên đầu câu SQL. Nếu thấy chữ `Seq Scan` trên một bảng tỷ dòng, đó là lúc em phải thêm Index.
+
+---
 ## 3. APACHE CALCITE - 2018
 
 ### Paper Info
@@ -481,8 +541,35 @@ graph TD
 | Streaming SQL | ✅ | STREAM keyword |
 | DDL | Partial | Via extensions |
 
----
+### Limitations & Evolution (Sự thật phũ phàng)
+- Federation linh hoạt nhưng pushdown không đầy đủ sẽ kéo cost về engine trung tâm.
+- Heterogeneous sources làm cost model khó chính xác.
+- **Evolution:** adapter capabilities rõ ràng hơn, smarter cross-source planning.
 
+### War Stories & Troubleshooting
+- Triệu chứng: join liên nguồn chạy rất chậm dù từng nguồn đều nhanh riêng lẻ.
+- Cách xử lý: tăng pushdown, materialize intermediate hợp lý, giới hạn cross-source joins.
+
+### Metrics & Order of Magnitude
+- Pushdown ratio (% operators push xuống source) là metric quan trọng.
+- Remote scan bytes và network shuffle thường quyết định độ trễ federated query.
+- Adapter error/retry rate ảnh hưởng trực tiếp reliability.
+
+### Micro-Lab
+```sql
+-- Dùng EXPLAIN để xem mức pushdown khi query qua Calcite layer
+EXPLAIN PLAN FOR
+SELECT * FROM mysql.orders o JOIN pg.customers c ON o.customer_id = c.id;
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Rất nhiều Junior nhầm tưởng Calcite là một Database. Sự thật: Calcite chỉ là **"Bộ não" (Optimizer)**, nó không có "Cơ bắp" (Storage/Execution Engine). Nó là thư viện Java chuyên để parse SQL và sinh ra Kế hoạch thực thi (Query Plan). Nhược điểm của nó là viết các luật tối ưu (Custom Rules) bằng Java cực kỳ cồng kềnh và khó debug.
+    
+2. **War Stories & Troubleshooting:** Trino, Flink, và Hive đều nhúng Calcite ở bên trong. Khi em viết một câu Flink SQL lồng nhau quá sâu (Nested views), bộ Rule Engine của Calcite bị lặp vô tận (Infinite Loop) khi cố gắng đẩy điều kiện `WHERE` xuống dưới (Predicate Pushdown). Flink Client báo lỗi `StackOverflowError` ngay lúc submit job.
+
+---
 ## 4. VECTORIZED EXECUTION - 2005
 
 ### Paper Info
@@ -613,6 +700,28 @@ graph LR
 - **Velox (Meta)** — Reusable vectorized execution library
 - **DataFusion** — Apache Arrow's vectorized query engine
 - **Polars** — Vectorized DataFrame operations
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Vectorized execution vẫn bị giới hạn bởi memory bandwidth và branchy logic.
+- Không phải operator nào cũng vectorize tốt.
+- **Evolution:** SIMD-aware operators, better selection vectors, hybrid compiled-vectorized paths.
+
+### War Stories & Troubleshooting
+- Triệu chứng: CPU cao nhưng throughput thấp ở workload nhiều UDF/branch.
+- Cách xử lý: giảm branching, precompute expressions, tune vector batch size.
+
+### Metrics & Order of Magnitude
+- Vector batch throughput và cycles/tuple là metric kỹ thuật quan trọng.
+- L1/L2 miss rate cao làm mất lợi thế vectorization.
+- Selection ratio quá thấp có thể làm overhead vector pipeline tăng.
+
+### Micro-Lab
+```python
+import numpy as np
+x = np.random.randint(0, 100, size=1_000_000)
+y = x[x > 50]
+print({"input": len(x), "output": len(y)})
+```
 
 ---
 
@@ -767,8 +876,40 @@ graph TD
 - **Spark Whole-Stage Codegen** — Java code generation
 - **Databricks Photon** — Compiled C++ engine
 
----
+### Limitations & Evolution (Sự thật phũ phàng)
+- JIT compile giúp nhanh runtime nhưng tốn startup cho query ngắn.
+- Debug generated code và profiling khó hơn mô hình interpreted.
+- **Evolution:** adaptive compile threshold, hybrid interpreter+JIT, better code cache reuse.
 
+### War Stories & Troubleshooting
+- Triệu chứng: workload query ngắn bị chậm khi bật JIT toàn cục.
+- Cách xử lý: đặt ngưỡng compile theo query complexity/time.
+
+### Metrics & Order of Magnitude
+- Compile time share (% thời gian compile/tổng) là chỉ số quyết định ROI JIT.
+- Hot query hit rate trong code cache cho thấy hiệu quả tái sử dụng.
+- p99 latency giảm tốt nhất ở query CPU-bound dài.
+
+### Micro-Lab
+```sql
+-- So sánh kế hoạch có/không JIT (tùy hệ quản trị)
+EXPLAIN ANALYZE SELECT SUM(amount) FROM fact_sales WHERE amount > 0;
+```
+
+---
+> 💡 **Gemini Feedback**
+>4. VECTORIZED EXECUTION (2005) & 5. COMPILED QUERY EXECUTION (2011)
+
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> 
+> 1. **Limitations & Evolution (Sự thật phũ phàng):** Đây là 2 trường phái tối ưu chém giết nhau suốt một thập kỷ: Vectorized (ClickHouse) vs Compiled/JIT (HyPer, Spark). JIT compile câu SQL thành mã máy (Assembly) chạy cực nhanh, nhưng nó mất thời gian để "biên dịch" (warm-up). Nếu câu query của em vốn dĩ chỉ tốn 10ms để chạy, thì việc dùng JIT biên dịch tốn thêm 50ms là một sự "tối ưu lùi". Do đó DuckDB và ClickHouse chọn Vectorized (xử lý từng lô 1024 dòng) để có độ trễ cực thấp.
+>     
+> 2. **War Stories & Troubleshooting:** Hiện tượng **"CPU Cache Miss"**. Mô hình Volcano cổ điển xử lý từng dòng một (Tuple-at-a-time). Mỗi lần gọi hàm `next()`, CPU lại phải nhảy qua nhảy lại giữa các dòng code, làm rớt bộ nhớ đệm (L1/L2 Cache Miss). Đưa Vectorized vào (như việc bật tính năng Arrow trên Spark), CPU được nhồi một mảng (array) các con số cùng kiểu vào thanh ghi SIMD, xử lý cùng lúc. Tốc độ thực tế vọt lên gấp 10-50 lần chỉ nhờ chiều chuộng CPU Cache.
+>     
+> 3. **Micro-Lab:** Trong Apache Spark, hãy thử so sánh tốc độ của hàm UDF viết bằng Python thường (Volcano model) và UDF viết bằng Pandas (Vectorized Arrow). Em sẽ thấy sự khác biệt của vật lý.
+>
+
+---
 ## 6. ORCA - MODULAR OPTIMIZER - 2014
 
 ### Paper Info
@@ -867,8 +1008,36 @@ graph TD
     style Explicit fill:#f3e5f5
 ```
 
----
+### Limitations & Evolution (Sự thật phũ phàng)
+- ORCA mạnh cho MPP nhưng cost model motion rất nhạy với stats và network.
+- Optimizer độc lập tăng flexibility nhưng tăng độ phức tạp integration.
+- **Evolution:** cải thiện motion costing, minidump-driven regression testing, better skew awareness.
 
+### War Stories & Troubleshooting
+- Triệu chứng: kế hoạch chọn redistribute quá nặng thay vì broadcast table nhỏ.
+- Cách xử lý: cập nhật stats kích thước bảng, kiểm tra thresholds broadcast/motion.
+
+### Metrics & Order of Magnitude
+- Motion bytes và skew factor giữa segments là KPI MPP cốt lõi.
+- Segment imbalance cao dẫn đến tail latency tăng mạnh.
+- Planning stability giữa các lần chạy cùng query phản ánh health optimizer.
+
+### Micro-Lab
+```text
+MPP plan sanity:
+1) Kiểm tra số Motion operators
+2) So sánh redistributed bytes vs table size
+3) Tìm segment có runtime p95 cao nhất
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Orca sinh ra cho môi trường MPP (Massively Parallel Processing - Phân tán dữ liệu khổng lồ) như Greenplum. Ở MPP, chi phí đắt đỏ nhất không phải là CPU đọc ổ cứng, mà là **Network Shuffle** (chuyển data giữa các node). Orca giỏi ở chỗ nó biết khi nào nên tốn thêm CPU để tránh phải gửi data qua mạng lưới. Điểm yếu là kiến trúc này khá nặng và gắn chặt với hệ sinh thái VMware/Pivotal.
+    
+2. **War Stories & Troubleshooting:** Data Skew (nghiêng dữ liệu). Orca tính toán rất hay, chia đều data cho 100 node. Nhưng tự nhiên có một cột `country_code` chứa tới 90% là giá trị 'VN'. Khi `GROUP BY`, toàn bộ 90% data đó bay qua mạng dồn vào đúng 1 node vật lý. Node đó cháy RAM, 99 node còn lại ngồi chơi xơi nước. Bộ tối ưu hóa (Optimizer) hoàn toàn bất lực trước Data Skew.
+
+---
 ## 7. HYPER/UMBRA - MODERN OLAP - 2016
 
 ### Paper Info
@@ -970,6 +1139,27 @@ graph TD
 - **SingleStore** — Hybrid OLTP/OLAP
 - **TiDB** — HTAP inspiration
 - **PostgreSQL JIT** — LLVM compilation concept from HyPer
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- HTAP một hệ thống khó đạt đồng thời latency thấp cho cả OLTP lẫn OLAP.
+- Snapshot/copy-on-write có overhead khi write pressure cao.
+- **Evolution:** better storage tiering, refined snapshotting, adaptive mixed-workload scheduling.
+
+### War Stories & Troubleshooting
+- Triệu chứng: OLAP nặng làm ảnh hưởng transaction latency giờ cao điểm.
+- Cách xử lý: workload isolation, resource groups, snapshot cadence tuning.
+
+### Metrics & Order of Magnitude
+- OLTP p99 và OLAP throughput phải theo dõi song song để tránh tối ưu lệch.
+- Snapshot creation/merge time ảnh hưởng directly HTAP stability.
+- NUMA locality miss rate cao làm giảm lợi thế execution hiện đại.
+
+### Micro-Lab
+```text
+HTAP check:
+- Đo p99 OLTP trước/sau chạy truy vấn OLAP nặng
+- Ghi CPU/memory theo resource group
+```
 
 ---
 
@@ -1114,8 +1304,47 @@ SET spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes = 256MB;
 - **Presto** — Runtime optimization
 - **Concept adopted** — by most distributed query engines
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- AQE giúp runtime nhưng phụ thuộc chất lượng thống kê theo stage.
+- Một số query có re-optimization overhead không đáng so với lợi ích.
+- **Evolution:** fine-grained adaptive operators, better skew heuristics, lower control overhead.
+
+### War Stories & Troubleshooting
+- Triệu chứng: AQE bật nhưng query vẫn chậm do skew cực đoan hoặc join hint xung đột.
+- Cách xử lý: kiểm tra AQE plan changes, điều chỉnh skew/broadcast thresholds.
+
+### Metrics & Order of Magnitude
+- Shuffle read/write bytes và skewed partition ratio là 2 chỉ số then chốt.
+- Số lần plan re-optimized phản ánh mức AQE can thiệp.
+- Stage time variance cao là dấu hiệu imbalance còn tồn tại.
+
+### Micro-Lab
+```sql
+SET spark.sql.adaptive.enabled=true;
+EXPLAIN FORMATTED
+SELECT c_id, SUM(amount) FROM fact_orders GROUP BY c_id;
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** AQE của Spark 3.x giống như một vị cứu tinh, nó vừa chạy vừa nhìn data thực tế để sửa lại kế hoạch (VD: Gom các partition nhỏ lại thành lớn). Tuy nhiên, **AQE khiến Junior trở nên lười biếng**. Nhiều bạn vứt luôn việc tối ưu SQL ban đầu, viết code rác và hy vọng AQE sẽ "độ" hệ thống. AQE không thể cứu được một câu Cartesian Join (Cross Join) phi logic!
+    
+2. **War Stories & Troubleshooting:** Lỗi **"Kẹt ở 200 Partitions"**. Mặc định `spark.sql.shuffle.partitions` là 200. Nếu em xử lý 10TB data, 200 cục này quá to, OOM sập job. Nếu em bật AQE, tự set số partition lên 10.000, AQE sẽ tự động gộp (coalesce) lại nếu thấy data nhỏ. Nhưng nếu data thực sự lớn, việc AQE liên tục phân tích và gộp data ở giữa chừng lại làm tăng overhead, khiến job chậm đi trông thấy. Tính năng xịn nhưng phải hiểu data trước khi bật.
 ---
 
+## 10. THE NEW ERA OF QUERY EXECUTION (2021 - 2026)
+
+Từ sau AQE (2020), các ông lớn nhận ra: Tối ưu thuật toán mãi cũng đến giới hạn. Cuộc cách mạng từ 2021-2026 xoay quanh hai thứ: **Đem AI vào làm Optimizer** và **Lắp ráp Database bằng Modular Engine (C++/Rust)**.
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Learned Query Optimizers (Dùng AI tối ưu SQL):** Thay vì dùng các quy tắc toán học khô khan (Heuristics) để đoán xem một bảng có bao nhiêu dòng, các hệ thống như PostgreSQL hiện nay đang được cắm các extension AI (như `pg_hint_plan` kết hợp ML). Nó tự động học lịch sử chạy các câu query cũ để đoán xem câu query hiện tại nên dùng Index nào. Tuy nhiên, rủi ro là "hộp đen": Có ngày nó chạy 1 giây, ngày hôm sau nó dở chứng học sai và chạy mất 1 tiếng mà không ai hiểu vì sao.
+    
+2. **Modular Query Engines (Velox, DataFusion):** > - **Sự thật phũ phàng:** Ngày xưa công ty nào làm DB cũng phải tự viết lại nguyên cái Query Engine từ đầu, cực kỳ phí thời gian.
+    
+    - **Sự tiến hóa:** Meta (Facebook) mở mã nguồn **Velox (C++)**, còn Apache có **DataFusion (Rust)**. Chúng là các "Động cơ V8" đóng gói sẵn mọi tinh hoa tối ưu Vectorized và JIT. Bất kỳ ai muốn tạo ra một Data Warehouse mới vào năm 2026 chỉ cần lấy bộ parse SQL của Calcite, gắn vào động cơ Velox/DataFusion là có ngay một hệ thống sức mạnh ngang ngửa Snowflake. Điều này biến việc tự chế tạo Data Platform (như Data-Keeper) bằng phần cứng tự có trở nên dễ dàng và đạt hiệu năng đỉnh cao chưa từng thấy.
+----
 ## SUMMARY: QUERY OPTIMIZATION EVOLUTION
 
 ```mermaid
@@ -1209,6 +1438,50 @@ graph TD
 
 ---
 
+<mark style="background: #BBFABBA6;">💡 **Gemini Message**</mark>
+Từ 2021 đến 2026, chiến trường Query Optimization chứng kiến những cuộc "tắm máu" thực sự để vắt kiệt từng giọt hiệu năng của phần cứng và giải quyết bài toán chi phí Cloud.
+
+Nếu em định dấn thân vào việc tối ưu hệ thống dữ liệu, đây là 4 xu hướng tối thượng của giai đoạn này mà các paper học thuật chưa kịp cập nhật:
+
+### 1. Cuộc đào tẩu khỏi Java (The Great JVM Escape) - 2021
+
+- **Sự thật phũ phàng:** Suốt 10 năm, hệ sinh thái Big Data (Hadoop, Spark, Trino) bị thống trị bởi Java/Scala. Khi query xử lý hàng Terabyte trên RAM, cơ chế dọn rác (Garbage Collection) của máy ảo Java làm toàn bộ hệ thống bị đơ (pause) vài giây. Độ trễ này là không thể chấp nhận được ở năm 2026.
+    
+- **Kẻ thay đổi cuộc chơi:** **Databricks Photon Engine (2021)**. Databricks đã âm thầm đập bỏ hoàn toàn phần lõi thực thi của Spark và viết lại từ con số 0 bằng C++.
+    
+- **💡 Góc nhìn thực chiến:** Engine mới này tận dụng tập lệnh vector hóa trực tiếp trên CPU vật lý, bỏ qua hoàn toàn Java. Tốc độ các phép `JOIN` và `AGGREGATE` tăng gấp 10 lần. Bài học cho em: Đừng cố viết một Query Engine bằng Java hay Python. Tương lai của xử lý dữ liệu lõi thuộc về **C++ và Rust**.
+    
+
+### 2. Đẩy Query Engine xuống tận... Trình duyệt (WASM Execution) - 2022 đến nay
+
+- **Sự thật phũ phàng:** Người dùng mở Dashboard, web gửi câu SQL lên Server Cloud (Snowflake/BigQuery), Server quét data mất tiền, rồi trả kết quả về. 10.000 người vào xem thì công ty sạt nghiệp tiền Compute.
+    
+- **Kẻ thay đổi cuộc chơi:** **DuckDB-WASM** (WebAssembly).
+    
+- **💡 Góc nhìn thực chiến:** Thay vì chạy query trên server, kiến trúc mới sẽ ném thẳng một file Parquet vài trăm MB về trình duyệt (Chrome/Edge) của người dùng. DuckDB-WASM chạy trực tiếp bên trong trình duyệt, mượn sức mạnh CPU và RAM của chính người dùng để chạy lệnh SQL vẽ biểu đồ. **Chi phí Compute của Server = 0 đồng.** Đây là một "vũ khí hạt nhân" để cắt giảm hóa đơn Cloud.
+    
+
+### 3. Tái thiết kế Khả năng chịu lỗi (Fault-Tolerant Execution) - 2022
+
+- **Sự thật phũ phàng:** Trino (Presto) sinh ra để chạy nhanh trên RAM. Nhưng nếu em dùng Trino chạy một câu SQL nặng mất 3 tiếng, đến phút thứ 2 tiếng 59 mà một node bị sập mạng, TOÀN BỘ câu query đó chết và phải chạy lại từ đầu.
+    
+- **Kẻ thay đổi cuộc chơi:** Project Tardis của Trino (ra mắt kiến trúc **Fault-Tolerant Execution - FTE**).
+    
+- **💡 Góc nhìn thực chiến:** Trino bắt đầu học theo Spark, cho phép ghi tạm (spill) dữ liệu trung gian xuống ổ cứng (như S3/MinIO) qua từng chặng. Nếu một node chết, nó chỉ cần lấy data từ ổ cứng chạy lại đúng phần việc của node đó. Nhờ vậy, ranh giới giữa "Engine truy vấn nhanh" (Trino) và "Engine chạy ETL nặng" (Spark) đã hoàn toàn bị xóa nhòa.
+    
+
+### 4. GPU-Accelerated SQL (Ép Card đồ họa đọc SQL) - Bùng nổ 2024-2026
+
+- **Sự thật phũ phàng:** Dù em có nhồi bao nhiêu nhân CPU đi nữa, băng thông bộ nhớ của CPU (Memory Bandwidth) chỉ ở mức vài chục GB/s. Khi `JOIN` hàng tỷ dòng, CPU phải ngồi chờ data nạp vào.
+    
+- **Kẻ thay đổi cuộc chơi:** RAPIDS cuDF của Nvidia.
+    
+- **💡 Góc nhìn thực chiến:** Kiến trúc Query Execution bây giờ không dồn hết cho CPU nữa. Nếu em cắm một con card đồ họa (như RTX 3090 hoặc 4090) vào dàn HP Z440 đang có, cài plugin RAPIDS vào Spark, tự động toàn bộ câu SQL của em sẽ được đẩy xuống hàng ngàn nhân CUDA của GPU để xử lý song song. Băng thông bộ nhớ của GPU lên tới hàng nghìn GB/s, giúp các tác vụ `GROUP BY` hay `JOIN` chạy nhanh gấp 20 đến 50 lần so với CPU đỉnh nhất. Em không cần sửa một dòng code SQL nào, hệ thống tự động nhận diện và offload xuống GPU.
+    
+
+**Tổng kết:** Từ 2021 đến 2026, Optimizer (người lập kế hoạch) thì được gắn AI, còn Execution Engine (kẻ thực thi) thì được trang bị **C++/Rust, GPU, và WebAssembly**. Nếu em áp dụng được dù chỉ một trong những kiến trúc này vào Data Platform của mình, em đã vượt xa tiêu chuẩn của các hệ thống doanh nghiệp thế hệ cũ rồi! Chắc chắn đây là những mảnh ghép hoàn hảo để kết thúc series 10 file tài liệu System Design cực kỳ tâm huyết này.
+
+---
 ## REFERENCES
 
 ### Papers

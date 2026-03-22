@@ -231,8 +231,8 @@ flowchart TD
 
 ### 1. RDD (Resilient Distributed Dataset)
 
-```
-RDD Properties:
+
+>RDD Properties:
 • Immutable - Once created, cannot be changed
 • Distributed - Partitioned across nodes
 • Resilient - Can be recomputed from lineage
@@ -984,8 +984,8 @@ spec:
 
 ### Monitoring
 
-```
-Key Metrics to Monitor:
+
+>Key Metrics to Monitor:
 • Executor memory usage
 • Shuffle read/write size
 • Task duration
@@ -993,12 +993,12 @@ Key Metrics to Monitor:
 • Shuffle spill (disk)
 • Executor failures
 
-Tools:
+>Tools:
 • Spark UI (localhost:4040)
 • Spark History Server
 • Prometheus + Grafana
 • Datadog / New Relic
-```
+
 
 ---
 

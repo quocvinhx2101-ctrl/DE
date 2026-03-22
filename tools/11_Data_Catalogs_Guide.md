@@ -673,7 +673,7 @@ emitter.emit_mce(builder.make_lineage_mce(
 
 **GraphQL Queries:**
 
-```graphql
+```GraphQL
 # Search for datasets
 query SearchDatasets {
   search(

@@ -108,6 +108,36 @@ graph TB
 - **dbt** — Dimensional modeling with SQL + snapshots for SCD2
 - **Industry standard** — For BI and analytics
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Kimball scale tốt cho BI nhưng dễ tạo **semantic drift** khi mỗi team tự làm mart.
+- SCD2 đúng lịch sử nhưng tăng storage + join complexity theo thời gian.
+- **Evolution:** metrics layer, semantic models tập trung và data contracts để giữ nghĩa business nhất quán.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: dimension duplicate key do ETL retry không idempotent.
+- Fix nhanh: dùng natural key + hash diff, `MERGE` idempotent, thêm unique test ở CI.
+
+### Metrics & Order of Magnitude
+- Star schema thường giảm độ phức tạp query BI từ nhiều join 3NF xuống 1 fact + vài dim.
+- SCD2 có thể tăng số bản ghi dim theo bậc nhiều lần sau 1-2 năm.
+- Snapshot fact table thường chiếm phần lớn storage ở workload dashboard lịch sử.
+
+### Micro-Lab
+```sql
+-- Detect duplicate business key trong dimension
+SELECT customer_id, COUNT(*) c
+FROM dim_customer
+GROUP BY customer_id
+HAVING COUNT(*) > 1;
+
+-- Kiểm tra SCD2 current row uniqueness
+SELECT customer_id
+FROM dim_customer
+WHERE is_current = TRUE
+GROUP BY customer_id
+HAVING COUNT(*) > 1;
+```
+
 ---
 
 ## 2. BUILDING THE DATA WAREHOUSE (Inmon) - 1992
@@ -176,6 +206,46 @@ graph LR
 - **Enterprise data warehouses** — Traditional approach
 - **Data Vault** — Evolution of Inmon ideas
 - **Modern Lakehouse** — Hybrid approaches combine both
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- 3NF EDW cho governance mạnh nhưng **time-to-value chậm** với team nhỏ.
+- Query analytics ad-hoc thường nặng join, khó đạt UX BI tốt nếu thiếu marts.
+- **Evolution:** hybrid architecture (raw normalized core + serving marts/lakehouse semantic layer).
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: ETL bottleneck do phụ thuộc chuỗi dài từ source → EDW → mart.
+- Fix nhanh: tách pipeline theo domain, incremental load, CDC cho bảng lớn.
+
+### Metrics & Order of Magnitude
+- Top-down EDW thường có lead time triển khai dài hơn nhiều so với mart-first.
+- Query latency trên 3NF có thể cao hơn đáng kể so với star schema cho dashboard.
+- CDC incremental thường giảm dữ liệu scan mỗi run theo bậc 10-100x so với full reload.
+
+### Micro-Lab
+```sql
+-- So sánh đơn giản: row count raw -> edw -> mart
+SELECT 'raw_orders' AS t, COUNT(*) FROM raw.orders
+UNION ALL
+SELECT 'edw_orders', COUNT(*) FROM edw.orders
+UNION ALL
+SELECT 'mart_sales', COUNT(*) FROM mart.sales;
+```
+
+
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _(Có thể gộp chung góc nhìn cho 2 ông tổ ngành Data Modeling này)_
+ 
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Mô hình Star Schema của Kimball cực kỳ tuyệt vời cho BI Dashboard truyền thống. Nhưng trong kỷ nguyên Cloud Data Warehouse (như BigQuery, Snowflake), việc `JOIN` hàng chục bảng Dimension với Fact lại tốn nhiều compute (CPU) hơn là lưu trữ. Xu hướng hiện tại là **OBT (One Big Table)** - phi chuẩn hóa hoàn toàn (Denormalized) thành một bảng khổng lồ chứa mọi cột, tận dụng định dạng Columnar để quét với tốc độ bàn thờ thay vì tốn tiền chạy phép `JOIN`.
+
+2. **War Stories & Troubleshooting:** Cơn ác mộng **SCD Type 2 (Slowly Changing Dimensions)**. Junior thiết kế bảng lưu lịch sử thay đổi của User với cột `valid_from` và `valid_to`. Sau 1 năm, bảng phình to từ 1 triệu lên 100 triệu dòng vì các thay đổi vặt vãnh. Khi query lấy "trạng thái hiện tại", vì quên gắn index hoặc partition trên cờ `is_current = TRUE`, câu query quét sạch 100 triệu dòng và báo lỗi Timeout.
+
+3. **Metrics & Order of Magnitude:** Storage trên Cloud (S3/GCS) giá chỉ khoảng $23/TB/tháng, cực kỳ rẻ. Nhưng Compute thì tính bằng giây và rất đắt. Do đó, thà lặp lại dữ liệu (Data redundancy) để đỡ tốn compute khi đọc, còn hơn là thiết kế chuẩn hóa (3NF) cực đẹp rồi trả tiền tỷ cho hóa đơn CPU.
+
+4. **Micro-Lab:** Thử sức viết một câu query lấy trạng thái mới nhất của SCD Type 2 kinh điển: `SELECT * FROM dim_user WHERE current_date BETWEEN valid_from AND valid_to;`
 
 ---
 
@@ -255,6 +325,27 @@ graph LR
 - **All columnar DBs** — Snowflake, BigQuery, ClickHouse
 - **Parquet, ORC** — Columnar file formats
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Write path phức tạp do cần cân bằng read-store/write-store + compaction.
+- Workload update-heavy sẽ chịu write amplification cao.
+- **Evolution:** MPP cloud warehouses + automatic clustering/compaction.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: table bloat/small files sau nhiều upsert batch nhỏ.
+- Fix nhanh: gom batch lớn hơn, chạy compaction định kỳ, enforce target file size.
+
+### Metrics & Order of Magnitude
+- Columnar scan cho query chỉ vài cột thường tiết kiệm I/O theo bậc lớn so với row store.
+- Compression ratio cột low-cardinality thường cao hơn rõ rệt.
+- Read-heavy OLAP thường được lợi lớn nhất, còn write-heavy thì trade-off mạnh.
+
+### Micro-Lab
+```sql
+-- So sánh bytes scanned giữa SELECT * và chỉ cột cần thiết
+EXPLAIN SELECT * FROM sales;
+EXPLAIN SELECT revenue FROM sales;
+```
+
 ---
 
 ## 4. MONETDB/X100 - 2005
@@ -327,6 +418,40 @@ graph LR
 - **Apache Arrow** — Columnar format designed for vectorized processing
 - **Velox (Meta)** — Vectorized execution library
 - **All modern OLAP** — Vectorized processing is now standard
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Vectorization mạnh cho analytics nhưng không tự giải quyết tối ưu join skew/distribution.
+- Batch size tuning sai có thể làm cache miss tăng thay vì giảm.
+- **Evolution:** vectorized + codegen hybrid engines (Photon, Velox, DuckDB internals).
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: CPU cao nhưng throughput không tăng vì batch size không phù hợp.
+- Fix nhanh: tune vector size, bật profile operator-level, kiểm tra memory locality/NUMA.
+
+### Metrics & Order of Magnitude
+- Vectorized execution thường giảm function-call overhead theo bậc đáng kể.
+- SIMD-friendly workloads có thể tăng throughput nhiều lần so với tuple-at-a-time.
+- Tail latency vẫn phụ thuộc join strategy và data skew.
+
+### Micro-Lab
+```python
+import duckdb, time
+con = duckdb.connect()
+con.execute("CREATE TABLE t AS SELECT i AS x, i%100 AS g FROM range(5000000) t(i)")
+t0=time.time(); con.execute("SELECT g, SUM(x) FROM t GROUP BY g").fetchall(); print(round(time.time()-t0,2),"s")
+```
+
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+>_(Columnar & Vectorized Execution - Trái tim của mọi Data Warehouse hiện đại)_
+
+1. **Limitations & Evolution (Sự thật phũ phàng):** Column-oriented Database (như ClickHouse, Redshift) quét dữ liệu phân tích cực nhanh, nhưng nó là thảm họa nếu em dùng để ghi dữ liệu từng dòng một (Row-by-row Insert) hoặc Update thường xuyên (OLTP). Để update một dòng trong C-Store, hệ thống phải mở lại hàng loạt file vật lý của từng cột, ghi đè lại, cực kỳ tốn I/O đĩa.
+
+2. **War Stories & Troubleshooting:** Lỗi "chết nhát" của Junior khi mới dùng Data Warehouse: Code một vòng lặp For chạy 10.000 lần lệnh `INSERT INTO dw_table VALUES (...)` từ app Kafka sang. Hậu quả là Redshift/ClickHouse bị treo cứng và sập toàn bộ cluster vì sinh ra quá nhiều file rác và khóa (lock). Cách fix: LUÔN LUÔN dùng **Bulk Load / Micro-batch** (Gom 10.000 dòng thành 1 file CSV/Parquet rồi dùng lệnh `COPY` đẩy vào 1 lần).
+
+3. **Metrics & Order of Magnitude:** Chạy lệnh `SELECT SUM(revenue) FROM sales` trên bảng 100 cột dung lượng 1TB. Row-based DB (MySQL, Postgres) sẽ phải đọc cả 1TB từ đĩa lên RAM. Column-based DB (ClickHouse, Snowflake) chỉ đọc đúng 1 cột revenue, tốn vỏn vẹn 10GB I/O. Nhanh hơn 100 lần.
 
 ---
 
@@ -425,6 +550,35 @@ graph LR
 - **Snowflake, Databricks** — Commonly implemented
 - **Enterprise DW** — Alternative to Kimball for complex sources
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Data Vault linh hoạt nhưng **độ phức tạp modeling cao** cho junior teams.
+- Query trực tiếp raw vault không thân thiện BI (thường vẫn cần marts).
+- **Evolution:** metadata-driven DV automation + semantic marts phía trên.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: hash key inconsistency do khác chuẩn normalize giữa pipeline.
+- Fix nhanh: chuẩn hóa canonicalization function dùng chung cho mọi loader.
+
+### Metrics & Order of Magnitude
+- Số bảng trong DV thường tăng nhanh (hub/link/sat) so với star schema.
+- Parallel load mạnh cho ingestion nhiều nguồn đồng thời.
+- Chi phí compute query ad-hoc trên raw vault thường cao hơn serving marts.
+
+### Micro-Lab
+```sql
+-- Verify hash key deterministic
+SELECT customer_bk,
+       MD5(LOWER(TRIM(customer_bk))) AS hk_check
+FROM stg_customer
+LIMIT 20;
+```
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Data Vault được quảng cáo là "Agile", thích ứng tốt với thay đổi hệ thống nguồn. Nhưng sự thật: Nó đẻ ra một lượng bảng khổng lồ (Hub, Link, Satellite). Một query đơn giản có thể yêu cầu `JOIN` 10-15 bảng. Nó là một sự "Over-engineering" (làm phức tạp hóa vấn đề) khủng khiếp đối với các công ty startup hoặc vừa và nhỏ. Chỉ nên dùng ở các tập đoàn tài chính/ngân hàng siêu lớn với hàng trăm hệ thống nguồn phức tạp.
+
+2. **War Stories & Troubleshooting:** Công ty triển khai Data Vault trên Postgres, sau vài tháng số lượng bảng vọt lên 3.000 bảng. Khi chạy dbt để build model, Query Planner của Postgres bị "ngu" hoàn toàn khi phải tính toán đường đi cho lệnh `JOIN` 20 bảng Data Vault với nhau, dẫn đến treo RAM.
 ---
 
 ## 6. AMAZON REDSHIFT - 2012
@@ -506,6 +660,39 @@ graph TB
 - **Amazon Redshift** — First major cloud MPP warehouse
 - Influenced **Snowflake**, **BigQuery** design approaches
 - Established cloud data warehousing as standard practice
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Cluster sizing tĩnh dễ gây over/under-provision ở workload biến động.
+- Join/distribution key chọn sai gây data movement cost lớn.
+- **Evolution:** RA3 + spectrum/lakehouse hybrid, serverless warehouse models.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: query chậm do skew distribution (`DISTKEY` lệch).
+- Fix nhanh: đổi dist/sort key theo access pattern, VACUUM/ANALYZE định kỳ.
+
+### Metrics & Order of Magnitude
+- Data movement giữa nodes là cost lớn nhất trong nhiều query join.
+- Zone map tốt có thể giảm scan blocks đáng kể với cột sort phù hợp.
+- VACUUM/ANALYZE đều đặn ảnh hưởng trực tiếp plan quality.
+
+### Micro-Lab
+```sql
+-- Kiểm tra skew theo dist key
+SELECT distkey_col, COUNT(*) c
+FROM fact_sales
+GROUP BY distkey_col
+ORDER BY c DESC
+LIMIT 20;
+```
+
+---
+
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Kiến trúc gốc của Redshift (và Hadoop thời đầu) là khóa cứng Compute và Storage chung một máy. Khi em lưu data đầy ổ cứng, em buộc phải nâng cấp cả cụm (mua thêm CPU + RAM + Disk) dù em chả cần tính toán gì thêm. Đây là lỗ hổng chí mạng để Snowflake (tách rời Compute-Storage) đè bẹp Redshift sau này. (Gần đây Redshift đã ra mắt RA3 nodes để sửa sai).
+
+2. **War Stories & Troubleshooting:** Quên chạy `VACUUM` và `ANALYZE`. Data Warehouse bị chậm đi gấp 10 lần sau vài tháng hoạt động. Khi em `DELETE` hoặc `UPDATE` data trong Redshift, nó không xóa thật mà chỉ đánh dấu ẩn. Ổ cứng rác cứ thế phình to, query quét qua rác liên tục. Phải set up job tự động chạy `VACUUM` ban đêm để dọn rác vật lý và `ANALYZE` để update lại thống kê (statistics) cho Query Planner.
 
 ---
 
@@ -592,8 +779,41 @@ graph TB
 - Storage-compute separation now **industry standard**
 - Influenced **Databricks Lakehouse**, **BigQuery** evolution
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Dễ phát sinh cost nếu nhiều warehouse chạy song song thiếu governance.
+- Auto features tiện nhưng có thể che khuất root cause performance.
+- **Evolution:** workload isolation + resource monitors + query acceleration services.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: credit burn đột biến do BI dashboard polling quá dày.
+- Fix nhanh: auto-suspend ngắn, tách warehouse theo workload, giới hạn concurrency theo role.
+
+### Metrics & Order of Magnitude
+- Scale up/down warehouse ảnh hưởng latency theo bậc rõ rệt cho heavy joins.
+- Pruning micro-partition tốt có thể giảm scan cost nhiều lần.
+- Clone zero-copy gần như tức thì ở metadata layer.
+
+### Micro-Lab
+```sql
+-- Tìm query tốn credit/scan cao gần đây
+SELECT query_id, total_elapsed_time, bytes_scanned
+FROM table(information_schema.query_history())
+ORDER BY start_time DESC
+LIMIT 20;
+```
+
 ---
 
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Snowflake giải quyết hoàn hảo bài toán tách rời Compute và Storage. Nhưng nó tạo ra một nỗi đau mới: **Chi phí (Cloud Cost)**. Vì nó quá dễ dùng, scale quá dễ, Junior thường không tối ưu SQL mà dùng tiền (đẩy Virtual Warehouse lên size XL) để mua tốc độ.
+
+2. **War Stories & Troubleshooting:** Câu chuyện dở khóc dở cười có thật ở nhiều công ty: Một bạn Data Analyst viết query chạy report lúc 6h chiều thứ Sáu, bật Warehouse size 2X-Large (tốn vài chục $/giờ). Do query bị lỗi logic (Cartesian Join), nó chạy mãi không ra kết quả và treo lửng lơ suốt 2 ngày cuối tuần. Sáng thứ Hai công ty nhận bill Snowflake gần 10.000 USD cho một query rác.
+
+3. **Micro-Lab:** Khắc cốt ghi tâm dòng lệnh Auto-suspend bảo vệ túi tiền khi tạo compute node trên Snowflake: `CREATE WAREHOUSE my_wh WITH WAREHOUSE_SIZE = 'SMALL' AUTO_SUSPEND = 60 AUTO_RESUME = TRUE;` (Tự động tắt sau 60 giây không có query).
+
+
+---
 ## 8. SPARK SQL - 2015
 
 ### Paper Info
@@ -636,6 +856,35 @@ graph TB
 - **Databricks** — Commercial Spark platform
 - **Delta Lake** — Built on Spark
 - **Photon (Databricks)** — Vectorized C++ engine extending Catalyst
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Catalyst mạnh nhưng vẫn phụ thuộc stats; stats sai dẫn đến plan tệ.
+- Shuffle-heavy query vẫn là điểm đau lớn ở scale.
+- **Evolution:** AQE, cost model tốt hơn, vectorized backends.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: OOM ở join/aggregation do skew + broadcast sai.
+- Fix nhanh: bật AQE, skew join handling, giới hạn auto broadcast hợp lý.
+
+### Metrics & Order of Magnitude
+- Shuffle bytes là chỉ số quan trọng nhất để dự đoán runtime/cost.
+- Predicate pushdown + column pruning thường giảm I/O theo bậc lớn.
+- Whole-stage codegen giúp giảm CPU overhead đáng kể.
+
+### Micro-Lab
+```python
+df = spark.read.parquet("s3://bucket/fact_sales")
+df.filter("dt='2026-03-20'").select("customer_id","revenue").explain("formatted")
+# Quan sát pushdown + số stage/shuffle
+```
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Spark SQL dùng bộ tối ưu Catalyst rất thông minh. Nhưng khi em nhét data quá lớn vào, JVM (Java Virtual Machine) của Spark lại là điểm yếu. Việc dọn rác bộ nhớ (Garbage Collection - GC) của Java sẽ làm job Spark bị khựng (pause) liên tục, gây ra độ trễ cực lớn. Xu hướng hiện tại đang dịch chuyển dần sang các Engine viết bằng C++/Rust (như Photon của Databricks, hay DataFusion/Polars) để bỏ qua JVM.
+ 
+2. **War Stories & Troubleshooting:** Lỗi kinh điển **OOM (Out Of Memory) do Broadcast Join**. Spark cố gắng đẩy (broadcast) một bảng nhỏ sang toàn bộ các node để join cho nhanh (tránh shuffle qua mạng). Nhưng Junior vô tình truyền một bảng 10GB thay vì bảng 10MB. Toàn bộ các node Worker cố gắng nhét bảng 10GB này vào RAM, nổ tung và chết dây chuyền. Cách fix: Kiểm tra kỹ data size trước khi xài `broadcast()`, hoặc set `spark.sql.autoBroadcastJoinThreshold` hợp lý.
+
 
 ---
 
@@ -716,95 +965,74 @@ LIMIT 100;
 - **Starburst** — Enterprise Trino
 - Federated query pattern adopted widely
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Federated SQL rất tiện nhưng **cross-source join** dễ thành bottleneck nặng.
+- Governance/security đồng nhất across connectors là bài toán khó.
+- **Evolution:** lakehouse table formats + query acceleration/caching layers.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: query treo lâu vì kéo data lớn từ source OLTP qua network.
+- Fix nhanh: pushdown tối đa về source, pre-aggregate tại nguồn, materialize dataset trung gian.
+
+### Metrics & Order of Magnitude
+- Network shuffle và remote source latency quyết định p95/p99 cho federated query.
+- Query interactive thường cần giới hạn data scanned bằng partition/filter chặt.
+- Connector quality khác nhau tạo chênh lệch hiệu năng rất lớn.
+
+### Micro-Lab
+```sql
+-- So sánh plan trước/sau khi push filter xuống source
+EXPLAIN SELECT * FROM mysql.app.orders WHERE order_date >= DATE '2026-03-01';
+```
+
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Trino là công cụ Federated Query tuyệt đỉnh (cho phép `JOIN` 1 bảng từ Postgres với 1 bảng từ S3 Parquet). Nhưng em phải nhớ: **Trino KHÔNG CÓ ổ cứng lưu trữ**. Nó kéo dữ liệu qua dây mạng. Nếu em dùng Trino để chạy các batch job ETL khổng lồ (chạy vài tiếng, quét hàng Terabyte), chỉ cần đứt mạng 1 giây hoặc sập 1 node worker, toàn bộ job đó sẽ tạch và phải chạy lại từ đầu. Trino sinh ra cho _Interactive Query_ (truy vấn nhanh), còn ETL nặng hãy dùng Spark.
+
+2. **War Stories & Troubleshooting:** Hiện tượng "Nghẽn cổ chai mạng (Network Bottleneck)". Khi tự tay cấu hình Trino trên các server vật lý (ví dụ trên một dàn máy trạm cày cuốc cũ), I/O ổ đĩa SSD có thể lên tới 3000MB/s, nhưng tốc độ card mạng nội bộ chỉ có 1Gbps (~125MB/s). Trino cố gắng kéo data từ Storage Node lên Compute Node và bị thắt cổ chai ở dây mạng, CPU ngồi chơi xơi nước chờ data đến mòn mỏi.
+
+
 ---
 
 ## 10. APACHE ARROW - 2016
 
-### Paper/Documentation Info
-- **Title:** Apache Arrow: A Cross-Language Development Platform for In-Memory Data
-- **Authors:** Apache Arrow Community (Wes McKinney et al.)
-- **Website:** https://arrow.apache.org/
-- **Format Spec:** https://arrow.apache.org/docs/format/Columnar.html
+Trong bối cảnh data warehousing, Apache Arrow là lớp in-memory columnar giúp trao đổi dữ liệu giữa warehouse engine và compute libraries nhanh hơn, đặc biệt cho UDF/Python interoperability. Nó được dùng như cầu nối execution giữa hệ sinh thái SQL engine, DataFrame engine và transport protocols.
 
-### Key Contributions
-- Standardized columnar memory format
-- Zero-copy data sharing between systems
-- Cross-language compatibility (C++, Python, Java, Rust, etc.)
-- SIMD-optimized compute kernels
+> 📖 **Chi tiết kỹ thuật (memory layout, zero-copy, Arrow Flight, IPC formats):** xem [[10_Serialization_Format_Papers#5-apache-arrow---2016]]
 
-### Arrow Memory Layout
+### Limitations & Evolution (Sự thật phũ phàng)
+- Arrow mạnh ở in-memory interchange nhưng không thay thế hoàn toàn storage/table format.
+- Version/compatibility giữa libraries có thể gây friction trong production.
+- **Evolution:** Arrow Flight SQL, ADBC và chuẩn hóa connector layer.
 
-```mermaid
-graph TB
-    subgraph Logical[" "]
-        Logical_title["Logical Table"]
-        style Logical_title fill:none,stroke:none,color:#333,font-weight:bold
-        LT["id | name    | active<br/>1  | 'Alice' | true<br/>2  | 'Bob'   | false<br/>3  | null    | true"]
-    end
+### War Stories & Troubleshooting
+- Lỗi phổ biến: fallback sang serialization cũ làm mất lợi ích zero-copy.
+- Fix nhanh: pin phiên bản PyArrow/engine tương thích, benchmark pipeline trước/sau khi bật Arrow.
 
-    subgraph Arrow[" "]
-        Arrow_title["Arrow Columnar Layout"]
-        style Arrow_title fill:none,stroke:none,color:#333,font-weight:bold
-        subgraph IntCol[" "]
-            IntCol_title["Column: id (Int32)"]
-            style IntCol_title fill:none,stroke:none,color:#333,font-weight:bold
-            IV["Validity: [1,1,1]"]
-            ID["Values: [1,2,3]"]
-        end
-        subgraph StrCol[" "]
-            StrCol_title["Column: name (Utf8)"]
-            style StrCol_title fill:none,stroke:none,color:#333,font-weight:bold
-            SV["Validity: [1,1,0] (null at 3)"]
-            SO["Offsets: [0,5,8,8]"]
-            SD["Data: 'AliceBob'"]
-        end
-        subgraph BoolCol[" "]
-            BoolCol_title["Column: active (Bool)"]
-            style BoolCol_title fill:none,stroke:none,color:#333,font-weight:bold
-            BV["Validity: [1,1,1]"]
-            BD["Values: [1,0,1] (bit-packed)"]
-        end
-    end
+### Metrics & Order of Magnitude
+- Data interchange dùng Arrow thường giảm overhead copy/serialization đáng kể.
+- UDF path Python thường hưởng lợi rõ nhất khi tránh row-by-row conversion.
+- Throughput end-to-end phụ thuộc cả compute operator chứ không chỉ transport format.
 
-    Logical --> Arrow
+### Micro-Lab
+```python
+import pyarrow as pa, pandas as pd
+t = pa.table({'id':[1,2,3], 'v':[10.0,20.0,30.0]})
+df = t.to_pandas(types_mapper=pd.ArrowDtype)
+print(df.dtypes)
 ```
+---
 
-### Zero-Copy Ecosystem
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+> _(Lưu ý nhỏ: Nếu theo đúng lộ trình refactor, mục Arrow này sau này sẽ gộp về file `10_Serialization`. Nhưng cứ gắn tạm note này ở đây để hiểu mạch DW)_
 
-```mermaid
-graph TB
-    subgraph ArrowEco[" "]
-        ArrowEco_title["Arrow Zero-Copy Ecosystem"]
-        style ArrowEco_title fill:none,stroke:none,color:#333,font-weight:bold
-        Arrow["Apache Arrow<br/>(In-Memory Format)"]
-        
-        Pandas["Pandas 2.0<br/>(Arrow backend)"]
-        Polars["Polars<br/>(Built on Arrow)"]
-        DuckDB["DuckDB<br/>(Arrow integration)"]
-        Spark["Spark<br/>(Arrow for UDFs)"]
-        Flink["Flink<br/>(Arrow for Python)"]
-        Flight["Arrow Flight<br/>(Network protocol)"]
-        ADBC["ADBC<br/>(Database connectivity)"]
-    end
+ 1. **Limitations & Evolution (Sự thật phũ phàng):** Arrow là In-memory Format (trên RAM), Parquet là On-disk Format (trên ổ đĩa). Rất nhiều người nhầm lẫn đem lưu file Arrow xuống đĩa rồi hỏi sao nó to thế. Bản chất Arrow sinh ra để các hệ thống (như Python Pandas, Spark, JVM) ném data cho nhau qua RAM mà không phải dịch lại định dạng (Zero-copy serialization).
+ 
+ 2. **War Stories & Troubleshooting:** Trước khi có Arrow, dùng hàm UDF (User Defined Function) bằng Python trong Spark SQL là một cực hình. Spark (Java) phải serialize data ra, đẩy qua Python xử lý, rồi deserialize ngược lại Java. Tốc độ chậm như rùa. Khi bật `spark.sql.execution.arrow.pyspark.enabled = true`, data được giữ nguyên format Arrow ném thẳng vào bộ nhớ Python (tạo ra Pandas DataFrame/Vectorized UDF), tốc độ tăng vọt hàng chục lần. Chữ "Vectorized" ở đây chính thức tạo ra ma thuật.
 
-    Arrow --- Pandas
-    Arrow --- Polars
-    Arrow --- DuckDB
-    Arrow --- Spark
-    Arrow --- Flink
-    Arrow --- Flight
-    Arrow --- ADBC
-
-    Note1["All share same memory format<br/>= Zero-copy transfer between tools"]
-```
-
-### Impact on Modern Tools
-- **Pandas 2.0** — Arrow backend (PyArrow) for better performance
-- **Polars** — Built entirely on Arrow
-- **DuckDB** — Native Arrow integration
-- **Spark, Flink** — Arrow for Python UDFs (no serialization)
-- **Arrow Flight** — High-performance data transfer protocol
-- **ADBC** — Arrow Database Connectivity (next-gen ODBC/JDBC)
 
 ---
 
@@ -872,6 +1100,41 @@ graph TB
 
 ---
 
+<mark style="background: #BBFABBA6;">💡 **Gemini Message**</mark>
+Đúng là sau năm 2019 (với sự xuất hiện của Presto/Trino), giới Data Engineering dường như ngừng đẻ ra các "Động cơ Data Warehouse khổng lồ" mới.
+
+Lý do cực kỳ phũ phàng: **Thế giới đã quá ngán ngẩm với hóa đơn Cloud đắt đỏ và sự cồng kềnh của các hệ thống phân tán khổng lồ.** Từ năm 2019 đến 2026, thay vì xây thêm những tòa lâu đài nguyên khối (Monolithic), giới công nghệ tập trung vào **"Đập đi xây lại" (Unbundling)** và **"Tối ưu cục bộ"**. Dưới đây là những biến chuyển lớn nhất định hình bức tranh Data Warehouse 5 năm qua mà em phải nắm chắc để thiết kế con Data-Keeper cho chuẩn:
+
+### 1. Sự trỗi dậy của In-Process OLAP (2019 - nay): DuckDB xưng vương
+
+- **Sự thật phũ phàng:** Trào lưu Big Data khiến công ty nào cũng tưởng mình có "dữ liệu lớn" và cắm đầu mua Snowflake/BigQuery. Nhưng thực tế 90% các công ty chỉ có vài chục GB đến vài trăm GB data. Dùng cụm Spark/Trino để xử lý 10GB data là đem dao mổ trâu đi giết gà, vừa chậm vừa tốn tiền setup mạng.
+
+- **Kẻ thay đổi cuộc chơi:** **DuckDB (ra mắt 2019, bùng nổ 2022-2026)**. Nó làm cho Data Warehouse y hệt những gì SQLite làm cho Database truyền thống. Em không cần cài cắm server, không cần mạng. Nó nằm gọn trong 1 file chạy trực tiếp trên Python/Rust. Nếu em chạy DuckDB trên con máy trạm HP Z440 nhiều nhân CPU, nó có thể quét vài chục triệu dòng Parquet trong chưa tới nửa giây — nhanh hơn cả việc gọi API lên Cloud Data Warehouse. Trào lưu **"Local is the new Cloud"** (Mang data về chạy local) đang cực kỳ thịnh hành nhờ DuckDB.
+
+### 2. Sự tan chảy ranh giới (The Convergence): Lakehouse vs Warehouse
+
+- **Sự thật phũ phàng:** Khoảng 2020, các công ty nhận ra việc copy data từ Data Lake (S3) sang Data Warehouse (Redshift) là một sự ngu ngốc tốn kém.
+
+- **Kẻ thay đổi cuộc chơi:** Databricks tung ra **Lakehouse** (kết hợp sức mạnh tính toán của Warehouse lên trên ổ đĩa rẻ tiền của Data Lake). Ngay lập tức, Snowflake cũng phản đòn bằng cách cho phép query trực tiếp file Iceberg trên S3 mà không cần nạp vào hệ thống của họ.
+
+- **💡 Góc nhìn thực chiến:** Data Warehouse từ 2022 trở đi không còn là "một cái kho lưu trữ có tính toán". Nó đã bị xé nhỏ ra. Tính toán (Compute) là chuyện của Snowflake/Trino, còn Lưu trữ (Storage) trả về hết cho các Open Table Formats như Iceberg/Delta.
+
+### 3. Kỷ nguyên dbt & Kỹ nghệ hóa SQL (Modern Data Stack)
+
+- **Sự thật phũ phàng:** Dù engine có mạnh đến đâu, nhưng file SQL 3000 dòng `JOIN` chằng chịt do Junior viết vẫn là rác. Việc maintain (bảo trì) code SQL trong các Data Warehouse cũ là địa ngục vì không có version control, không có testing.
+
+- **Kẻ thay đổi cuộc chơi:** **dbt (Data Build Tool)** trở thành chuẩn mực công nghiệp từ 2020. Mọi logic biến đổi dữ liệu (Transform) bên trong Warehouse giờ được viết như software engineering: chia nhỏ thành từng file, dùng biến (Jinja), có kiểm thử (test) và CI/CD rõ ràng.
+
+### 4. Modular Data Engine (Lắp ráp Database bằng C++/Rust)
+
+- **Sự thật phũ phàng:** Tạo ra một Database mới từ đầu (như viết lại trình phân tích cú pháp SQL, viết lại bộ tối ưu query) tốn mất 10 năm. Java (cốt lõi của Hadoop/Spark) thì lại quá ngốn RAM do cơ chế dọn rác (GC).
+
+- **Kẻ thay đổi cuộc chơi:** Các dự án mã nguồn mở như **Apache DataFusion (viết bằng Rust)** hoặc **Velox (viết bằng C++ của Meta)**. Thay vì làm một cái DB hoàn chỉnh, họ làm ra các "bộ lòng" siêu tốc độ. Giờ đây, để build một hệ thống phân tích mới, các kỹ sư chỉ cần lấy bộ parse của Calcite, gắn với engine của DataFusion, và dùng chuẩn bộ nhớ của Arrow.
+
+
+**Tổng kết lại:** Từ 2019 đến nay, Data Warehouse không sinh ra thêm paper nào kiểu "Sáng tạo chấn động" vì cả ngành đang bận rộn **rã đông** những thiết kế cũ, viết lại bằng **Rust/C++** để bòn rút tối đa hiệu năng phần cứng, và đưa mọi thứ chạy thẳng trên **Object Storage (S3)**. Khi thiết kế Data-Keeper, em không cần phải cố mô phỏng lại một cụm Redshift hay Hadoop làm gì, chỉ cần kết hợp S3 (MinIO) + Iceberg + DuckDB/Trino là em đã có một kiến trúc hiện đại ngang ngửa các công ty công nghệ năm 2026 rồi!
+
+---
 ## 🔗 Liên Kết Nội Bộ
 
 - [[01_Distributed_Systems_Papers|Distributed Systems Papers]] — Infrastructure papers

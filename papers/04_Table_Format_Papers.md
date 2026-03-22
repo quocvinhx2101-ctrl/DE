@@ -12,19 +12,18 @@
 4. [Lakehouse: Unified Architecture](#4-lakehouse-unified-architecture---2021)
 5. [Apache Paimon](#5-apache-paimon---2023)
 6. [Table Format Comparison](#6-table-format-comparison)
-7. [Apache Parquet](#7-apache-parquet---2013)
-8. [Apache ORC](#8-apache-orc---2013)
-9. [Apache Avro](#9-apache-avro---2009)
-10. [Academic Foundations](#10-academic-foundations)
-11. [Industry Adoption & Case Studies](#11-industry-adoption--case-studies)
-12. [Future Directions](#12-future-directions)
-13. [Summary Table](#summary-table)
+7. [Underlying File Formats](#7-underlying-file-formats) *(→ chi tiết: [[10_Serialization_Format_Papers]])*
+8. [Academic Foundations](#8-academic-foundations) *(→ chi tiết: [[06_Database_Internals_Papers]])*
+9. [Industry Adoption & Case Studies](#9-industry-adoption--case-studies)
+10. [Future Directions](#10-future-directions)
+11. [Summary Table](#11-summary-table)
 
 ---
 
 ## 1. APACHE ICEBERG - 2017
 
 ### Paper/Documentation Info
+
 - **Title:** Iceberg: A Modern Table Format for Big Data
 - **Authors:** Ryan Blue, Daniel Weeks, et al. (Netflix)
 - **Original Blog:** https://netflixtechblog.com/iceberg-at-netflix-12d1c3c4d872 (2018)
@@ -238,6 +237,39 @@ graph TD
 - **Stripe** — Financial data processing
 - **Snowflake** — Native Iceberg Tables support
 - **AWS** — Athena, Glue, EMR all support Iceberg
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Iceberg metadata tree mạnh nhưng có thể phình to ở table commit cực dày.
+- Row-level deletes tiện nhưng merge-on-read cost tăng nếu delete files tích tụ.
+- **Evolution:** metadata compaction, branch/tag workflow, engine-specific optimizers cho delete planning.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: query chậm dần do **small files + quá nhiều manifests**.
+- Fix nhanh: chạy rewrite data files + rewrite manifests theo lịch, enforce target file size từ ingestion.
+
+### Metrics & Order of Magnitude
+- File size mục tiêu thường 128-512MB giúp cân bằng parallelism và metadata overhead.
+- Manifest count tăng theo số commit/file; planning latency tăng rõ khi không compact.
+- Hidden partitioning giảm lỗi query do quên filter partition column.
+
+### Micro-Lab
+```sql
+-- Kiểm tra snapshot và số lượng file để phát hiện metadata bloat
+SELECT snapshot_id, committed_at FROM db.events.snapshots ORDER BY committed_at DESC LIMIT 5;
+SELECT COUNT(*) AS data_files FROM db.events.files;
+```
+
+
+---
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Iceberg giải quyết được bài toán ACID bằng cách đẻ ra một cây gia phả metadata khổng lồ (Snapshot -> Manifest List -> Manifest File). Sự thật phũ phàng là nếu em cứ Insert/Update liên tục (ví dụ từ luồng streaming) mà không bảo trì, thư mục metadata sẽ chứa hàng triệu file JSON/Avro li ti. Khi query, thay vì quét data, hệ thống bị nghẽn mạng chỉ vì phải tải file metadata về đọc.
+ 
+2. **War Stories & Troubleshooting:** Lỗi **"Slow Planning Time"**. Trino gửi câu lệnh `SELECT` xuống Iceberg, và bị treo lửng lơ mất 5 phút trước khi thực sự quét dòng data đầu tiên. Nguyên nhân: Junior không cài đặt job dọn dẹp, Iceberg phải đọc 10.000 file manifest để lập kế hoạch. Cách fix: Bắt buộc phải lên lịch chạy `expire_snapshots` và `rewrite_data_files` (Compaction) hàng ngày hoặc hàng tuần.
+
+3. **Metrics & Order of Magnitude:** Kích thước file Parquet chuẩn trong Iceberg nên được ép ở mức 128MB đến 512MB. Dưới 10MB là rác (small files), trên 1GB thì engine tốn quá nhiều RAM để đọc một cục.
+
+4. **Micro-Lab:** Chạy câu lệnh thần thánh này trên Spark/Trino để dọn dẹp lịch sử Iceberg, cứu vớt dung lượng ổ cứng: `CALL catalog.system.expire_snapshots('my_db.my_table', TIMESTAMP '2026-03-01 00:00:00.000');`
 
 ---
 
@@ -503,6 +535,41 @@ graph TD
 - **Starbucks, Comcast, Shell** — Large Delta deployments
 - **Over 10,000 organizations** — Use Delta Lake in production
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- JSON log đơn giản nhưng có thể chậm replay nếu checkpoint cadence không hợp lý.
+- Upsert-heavy workloads dễ phát sinh small files và compaction debt.
+- **Evolution:** deletion vectors, liquid clustering, optimized writes/autotune.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: `MERGE` chạy lâu + VACUUM không hiệu quả do retention/config sai.
+- Fix nhanh: tách merge theo partition window, bật optimizeWrite/autoCompact, rà soát retention policy.
+
+### Metrics & Order of Magnitude
+- `MERGE` cost phụ thuộc mạnh vào file pruning và clustering quality.
+- Checkpoint định kỳ giảm thời gian reconstruct table state khi đọc transaction log.
+- Z-order/liquid clustering tốt có thể giảm bytes scanned nhiều lần cho query selective.
+
+### Micro-Lab
+```sql
+-- Quan sát lịch sử commit để debug write amplification
+DESCRIBE HISTORY my_table;
+
+-- Kiểm tra số file hiện tại (Spark SQL/Delta metadata view tùy môi trường)
+SELECT COUNT(*) FROM delta.`/path/to/my_table`;
+```
+
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Delta Lake ra đời từ Databricks, và một thời gian dài bản Open Source (OSS) bị "thiến" rất nhiều tính năng xịn so với bản trả phí (Ví dụ: Z-Ordering, OPTIMIZE từng bị giấu đi). Thư mục `_delta_log` chứa hàng ngàn file JSON sinh ra theo mỗi transaction. Nếu em đọc Delta table bằng một engine không hỗ trợ tốt (như Athena bản cũ), nó sẽ parse JSON chậm đến phát khóc.
+ 
+2. **War Stories & Troubleshooting:** Lỗi **"Concurrent Append Exception"**. Khi em cấu hình 2 luồng Spark Streaming cùng ghi vào 1 bảng Delta Lake và chúng vô tình đụng độ nhau ở cùng một file/phân vùng, Delta sẽ bắn ra lỗi xung đột (Conflict) và ngắt job. Delta chỉ hỗ trợ tốt thao tác ghi từ nhiều nguồn (Multi-cluster writes) nếu em dùng tính năng trả phí trên Databricks, còn OSS thì em phải tự retries ở tầng code app.
+   
+3. **Metrics & Order of Magnitude:** Khi chạy lệnh `OPTIMIZE ... ZORDER BY`, em đang yêu cầu Spark đọc toàn bộ data lên RAM, sort lại theo không gian đa chiều, và ghi xuống đĩa. Job này ngốn CPU khủng khiếp. Nếu chạy trên máy local (như con HP Z440), hãy cẩn thận kẻo cháy CPU, chỉ nên Z-Order trên các cột thường xuyên dùng trong mệnh đề `WHERE`.
+
+4. **Micro-Lab:** Dùng Spark SQL để dọn rác (Vacuum) các file data vật lý đã bị xóa logic ở các transaction cũ (chỉ giữ lại 7 ngày): `VACUUM my_table RETAIN 168 HOURS;`
+
 ---
 
 ## 3. APACHE HUDI - 2017
@@ -718,7 +785,42 @@ graph TD
 - **Robinhood** — Financial data with strict correctness requirements
 - **Disney+ Hotstar** — Streaming analytics
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Hudi rất mạnh cho upsert nhưng ops tuning (index + compaction + cleaning) khá nặng.
+- MOR cho write latency tốt nhưng query path phức tạp hơn COW.
+- **Evolution:** metadata table, record index, async services tách rời để giảm pressure.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: compaction backlog làm read latency tăng theo thời gian.
+- Fix nhanh: tăng compaction parallelism, đặt SLA cho log file count, theo dõi timeline lag.
+
+### Metrics & Order of Magnitude
+- COW thường read nhanh hơn, MOR thường write nhanh hơn (trade-off theo workload).
+- Changelog replay và index lookup là cost trọng yếu của recovery/upsert.
+- File sizing + clustering ảnh hưởng trực tiếp query p95.
+
+### Micro-Lab
+```sql
+-- Incremental pull để verify CDC behavior
+SELECT *
+FROM hudi_table
+WHERE _hoodie_commit_time > '20260320090000';
+```
+
 ---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Hudi là ông vua của thao tác Upsert (Update/Insert) nặng nề, nhưng đi kèm là **"Config Hell"** (Địa ngục cấu hình). Để tune Hudi chạy mượt, em phải thiết lập vài chục tham số (bloom filter, record key, index type, compaction rule). Nó quá nặng nề và phức tạp nếu em chỉ làm các batch job đơn giản.
+
+2. **War Stories & Troubleshooting:** Chết chìm vì **MOR (Merge-On-Read)**. Hudi có chế độ MOR: khi Update, nó chỉ ghi file log nhỏ để ghi đè (cho nhanh), lúc nào có người query thì nó mới tự join log với file gốc ở trên RAM. Một ngày đẹp trời, luồng Compaction (gom log vào gốc) bị sập ngầm. Khi user chạy query `SELECT`, Hudi phải lấy hàng triệu file log ra Merge-On-Read on-the-fly, RAM nổ tung và query timeout vô phương cứu chữa.
+
+3. **Metrics & Order of Magnitude:** Tốc độ Upsert của Hudi nhanh hơn Iceberg nhờ thiết kế Index (Bloom Filter/HBase). Tuy nhiên độ trễ khi read ở chế độ MOR sẽ chậm hơn từ 2x-5x so với COW (Copy-On-Write) do overhead lúc gộp dữ liệu.
+
+4. **Micro-Lab:** Khi cấu hình ghi Hudi trên Spark, luôn nhớ phải định nghĩa khóa chính và cột thời gian để nó biết đường Upsert: `df.write.format("hudi").option("hoodie.datasource.write.recordkey.field", "uuid").option("hoodie.datasource.write.precombine.field", "ts").save(path)`
+
+---
+
 
 ## 4. LAKEHOUSE: UNIFIED ARCHITECTURE - 2021
 
@@ -877,8 +979,37 @@ graph LR
 - **Microsoft Fabric** — OneLake lakehouse architecture
 - **Apache Spark** — Primary compute engine for lakehouses
 
+### Limitations & Evolution (Sự thật phũ phàng)
+- Lakehouse hứa hẹn “one platform” nhưng governance/multi-engine compatibility vẫn là bài toán khó.
+- Team dễ đánh đổi chuẩn hóa dữ liệu để lấy tốc độ delivery ngắn hạn.
+- **Evolution:** data contracts, semantic layer, federated governance tự động hóa policy.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: Bronze/Silver/Gold drift semantics giữa team gây trust issue.
+- Fix nhanh: định nghĩa contract cho mỗi layer, test chất lượng bắt buộc trước promote layer.
+
+### Metrics & Order of Magnitude
+- Freshness SLA theo layer thường chênh nhau rõ (Bronze gần real-time, Gold theo batch/window).
+- Cost optimize thành công thường đến từ pruning + file compaction + workload isolation.
+- Data quality incident MTTR là KPI vận hành quan trọng ngang với latency.
+
+### Micro-Lab
+```sql
+-- Gate đơn giản trước khi promote Silver -> Gold
+SELECT COUNT(*) AS bad_rows
+FROM silver.orders
+WHERE order_id IS NULL OR amount < 0;
+```
+
 ---
 
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Lakehouse thực chất là một khái niệm Marketing thông minh do Databricks đẻ ra để giành miếng bánh với Snowflake (Warehouse). Nó không thần thánh đến mức "Xóa bỏ hoàn toàn Warehouse". Em vĩnh viễn không thể cắm trực tiếp 10.000 user đang xài BI Dashboard vào Lakehouse được, vì cơ chế Query Engine của Lakehouse (dù có xài Photon) vẫn chưa tối ưu Concurrency (đồng thời) tốt như một Warehouse chuyên dụng thực thụ.
+ 
+2. **War Stories & Troubleshooting:** Các công ty bị ảo tưởng sức mạnh, cố gắng dùng Lakehouse làm cơ sở dữ liệu xử lý giao dịch (OLTP) như kiểu Postgres. Kết quả là hệ thống sập toàn tập vì Storage Object (S3) có API rate limit cực thấp, không sinh ra để nhận vài vạn cú ping đọc/ghi vài byte mỗi giây. Lakehouse chỉ dành cho Analytics (OLAP).
+
+---
 ## 5. APACHE PAIMON - 2023
 
 ### Documentation Info
@@ -960,6 +1091,42 @@ CREATE TABLE user_events (
 | Spark support | Good | ⭐ Excellent | ⭐ Excellent | Good |
 | Community size | Growing | ⭐ Large | ⭐ Large | Large |
 | Maturity | Newer | Mature | Mature | Mature |
+
+### Limitations & Evolution (Sự thật phũ phàng)
+- Paimon rất hợp streaming-first nhưng ecosystem còn trẻ hơn Iceberg/Delta/Hudi.
+- Multi-engine interoperability chưa rộng bằng các format trưởng thành.
+- **Evolution:** connector maturity, metadata/index improvements, broader lakehouse integration.
+
+### War Stories & Troubleshooting
+- Lỗi phổ biến: compaction pressure cao khi ingest burst + key cardinality lớn.
+- Fix nhanh: tune bucket count/merge engine, tách stream theo domain key, kiểm soát commit frequency.
+
+### Metrics & Order of Magnitude
+- LSM-based write path thường cho throughput ingest cao hơn ở workload update liên tục.
+- Compaction backlog là leading indicator cho read latency degradation.
+- Bucket sizing ảnh hưởng trực tiếp đến skew và parallelism.
+
+### Micro-Lab
+```sql
+-- Sanity check changelog merge result
+SELECT user_id, SUM(event_count) AS total
+FROM user_events
+GROUP BY user_id
+ORDER BY total DESC
+LIMIT 10;
+```
+
+---
+
+> 💡 **Gemini Feedback**
+> **Góc nhìn Thực chiến (Senior to Junior)**
+1. **Limitations & Evolution (Sự thật phũ phàng):** Paimon sinh sau đẻ muộn, khắc phục điểm yếu của Iceberg ở mảng Streaming Upsert bằng cách nhúng thẳng cấu trúc **LSM-Tree** (giống hệt RocksDB/Cassandra) xuống S3/HDFS. Yếu điểm của Paimon là nó "bị khóa" khá chặt vào hệ sinh thái Flink. Nếu em xài Spark thì hỗ trợ không được mượt bằng Iceberg.
+ 
+2. **War Stories & Troubleshooting:** Đặc sản của LSM-Tree là **Read Amplification** (Khuếch đại khi đọc). Nếu em thiết kế cấu hình Paimon dở, các file Level 0 (nhận luồng write) phình to mà không kịp đẩy xuống Level 1, Level 2. Khi query một record, hệ thống phải lục lọi hàng trăm file ở tất cả các Level, ổ đĩa I/O kêu gào thảm thiết và tốc độ rùa bò.
+
+3. **Metrics & Order of Magnitude:** Nhờ LSM-Tree, tốc độ Ingestion (nạp data real-time) của Paimon khi có thay đổi bản ghi (CDC) đang giữ ngôi vương, vượt mặt cả Hudi và Iceberg ở quy mô siêu lớn. Phù hợp nhất cho kiến trúc Streaming Lakehouse.
+
+4. **Micro-Lab:** Nếu có dùng Flink SQL, hãy thử tạo bảng Paimon với bucket mặc định để test hiệu năng ghi: `CREATE TABLE my_paimon_table (id INT, val STRING, PRIMARY KEY (id) NOT ENFORCED) WITH ('connector' = 'paimon', 'bucket' = '4');`
 
 ---
 
@@ -1135,494 +1302,63 @@ graph TD
 
 ---
 
-## 7. APACHE PARQUET - 2013
+## 7. UNDERLYING FILE FORMATS
 
-### Paper/Documentation Info
-- **Title:** Dremel made simple with Parquet (based on Dremel paper)
-- **Authors:** Julien Le Dem (Twitter), Nong Li (Cloudera)
-- **Spec:** https://parquet.apache.org/docs/file-format/
-- **GitHub:** https://github.com/apache/parquet-format
-- **Based on:** Google Dremel paper (2010)
+Iceberg, Delta Lake, Hudi và Paimon là metadata/transaction layer nằm trên các serialization formats; lựa chọn format đúng quyết định trực tiếp scan cost, update path và interoperability giữa engines.
 
-### Key Contributions
-- Columnar file format for Hadoop ecosystem
-- Efficient nested data encoding (Dremel encoding)
-- Predicate pushdown via column statistics
-- Multiple compression codecs per column
-- Schema stored in file footer
+### Apache Parquet
 
-### Parquet File Structure
+Parquet là default storage format cho hầu hết lakehouse/table formats vì tối ưu cho analytical scan và predicate pruning ở tầng execution. Trong thực chiến, hầu hết tuning về file sizing/compaction đều nhằm phát huy tốt đặc tính của Parquet.
 
-```mermaid
-graph TD
-    subgraph ParquetFile[" "]
-        ParquetFile_title["Parquet File"]
-        style ParquetFile_title fill:none,stroke:none,color:#333,font-weight:bold
-        Magic1["Magic Number: PAR1"]
-        
-        subgraph RG1[" "]
-            RG1_title["Row Group 1 (typically 128MB)"]
-            style RG1_title fill:none,stroke:none,color:#333,font-weight:bold
-            CC1A["Column Chunk A<br/>(compressed pages)"]
-            CC1B["Column Chunk B<br/>(compressed pages)"]
-            CC1C["Column Chunk C<br/>(compressed pages)"]
-        end
-
-        subgraph RG2[" "]
-            RG2_title["Row Group 2"]
-            style RG2_title fill:none,stroke:none,color:#333,font-weight:bold
-            CC2A["Column Chunk A"]
-            CC2B["Column Chunk B"]
-            CC2C["Column Chunk C"]
-        end
-
-        subgraph Footer[" "]
-            Footer_title["File Footer"]
-            style Footer_title fill:none,stroke:none,color:#333,font-weight:bold
-            Schema["Schema (Thrift)"]
-            RGMeta["Row Group Metadata:<br/>- Column stats (min/max)<br/>- Offsets<br/>- Encodings<br/>- Compression info"]
-            FooterLen["Footer Length (4 bytes)"]
-        end
-
-        Magic2["Magic Number: PAR1"]
-    end
-
-    Magic1 --> RG1 --> RG2 --> Footer --> Magic2
-
-    style RG1 fill:#e3f2fd
-    style RG2 fill:#e3f2fd
-    style Footer fill:#fff3e0
-```
-
-### Column Chunk Detail
-
-```mermaid
-graph TD
-    subgraph ColumnChunk[" "]
-        ColumnChunk_title["Column Chunk"]
-        style ColumnChunk_title fill:none,stroke:none,color:#333,font-weight:bold
-        subgraph DP[" "]
-            DP_title["Data Pages"]
-            style DP_title fill:none,stroke:none,color:#333,font-weight:bold
-            P1["Page 1<br/>Repetition levels<br/>Definition levels<br/>Values (encoded)"]
-            P2["Page 2<br/>..."]
-        end
-
-        subgraph DictP[" "]
-            DictP_title["Dictionary Page (optional)"]
-            style DictP_title fill:none,stroke:none,color:#333,font-weight:bold
-            Dict["Dictionary:<br/>'NYC'=0, 'LA'=1, 'CHI'=2<br/>Values: [0,1,2,0,0,1,2...]"]
-        end
-
-        subgraph Encoding[" "]
-            Encoding_title["Encoding Types"]
-            style Encoding_title fill:none,stroke:none,color:#333,font-weight:bold
-            PLAIN["PLAIN: raw values"]
-            DICT["DICTIONARY: dictionary + indices"]
-            RLE["RLE: run-length encoding"]
-            DELTA["DELTA: delta encoding for ints"]
-        end
-    end
-
-    style DP fill:#e8f5e9
-    style DictP fill:#fff3e0
-    style Encoding fill:#f3e5f5
-```
-
-### Nested Data Encoding (Dremel)
-
-```
--- Schema
-message AddressBook {
-  required string owner;
-  repeated group contacts {
-    required string name;
-    optional string phone;
-  }
-}
-
--- Data
-{ owner: "Alice",
-  contacts: [
-    {name: "Bob", phone: "111"},
-    {name: "Carol"}  -- no phone
-  ]
-}
-{ owner: "Dave",
-  contacts: []  -- no contacts
-}
-
--- Encoding (Definition & Repetition Levels)
-owner:    values=[Alice, Dave],     r=[0,0], d=[0,0]
-name:     values=[Bob, Carol],      r=[0,1], d=[1,1]
-phone:    values=[111],             r=[0,1,0], d=[2,1,0]
-          (111 for Bob, NULL for Carol, no contacts for Dave)
-```
-
-### Key Features
-- **Predicate Pushdown:** Column stats enable skipping row groups
-- **Column Pruning:** Read only needed columns
-- **Compression:** Snappy, Gzip, LZ4, ZSTD per column
-- **Encoding:** Dictionary, RLE, Delta, Byte Stream Split
-- **Page-level CRC:** Data integrity verification
-
-### Parquet Performance Tips
-
-| Tip | Impact |
-|-----|--------|
-| Row group size ~128MB | Balance parallelism vs overhead |
-| Dictionary encoding for low-cardinality | 10-100x compression |
-| ZSTD compression | Best ratio/speed balance |
-| Sort by filter columns | Better min/max statistics |
-| Avoid too many small files | Metadata overhead |
-| Use column pruning | Read only needed columns |
+> 📖 **Chi tiết kỹ thuật (file structure, Dremel encoding, predicate pushdown, compression codecs):** xem [[10_Serialization_Format_Papers#3-apache-parquet---2013]]
 
 ---
 
-## 8. APACHE ORC - 2013
+### Apache ORC
 
-### Documentation Info
-- **Website:** https://orc.apache.org/
-- **Spec:** https://orc.apache.org/specification/
-- **GitHub:** https://github.com/apache/orc
+ORC thường xuất hiện trong hệ sinh thái Hive hoặc workloads legacy cần tương thích sâu với stack cũ. Với đa số kiến trúc table format hiện đại đa-engine, ORC là phương án ngữ cảnh đặc thù hơn là mặc định.
 
-### Key Contributions
-- Stripe-based columnar format
-- Built-in lightweight indexes
-- ACID support in Hive 3.x
-- Self-describing file format
-- Predicate pushdown with bloom filters
-
-### ORC File Structure
-
-```mermaid
-graph TD
-    subgraph ORCFile[" "]
-        ORCFile_title["ORC File"]
-        style ORCFile_title fill:none,stroke:none,color:#333,font-weight:bold
-        subgraph S1[" "]
-            S1_title["Stripe 1 (typically 250MB)"]
-            style S1_title fill:none,stroke:none,color:#333,font-weight:bold
-            SI1["Stream / Index Data<br/>Min/max per column per 10K rows"]
-            SD1["Row Data<br/>Columnar encoded"]
-            SF1["Stripe Footer<br/>Stream locations"]
-        end
-
-        subgraph S2[" "]
-            S2_title["Stripe 2"]
-            style S2_title fill:none,stroke:none,color:#333,font-weight:bold
-            SI2["Index Data"]
-            SD2["Row Data"]
-            SF2["Stripe Footer"]
-        end
-
-        subgraph FF[" "]
-            FF_title["File Footer"]
-            style FF_title fill:none,stroke:none,color:#333,font-weight:bold
-            TypeInfo["Type Information<br/>(full schema)"]
-            StripeInfo["Stripe Information<br/>(offset, length, row count)"]
-            Stats["File-level Statistics<br/>(per column min/max/sum/count)"]
-        end
-
-        PS["Postscript<br/>(compression, version)"]
-    end
-
-    S1 --> S2 --> FF --> PS
-
-    style S1 fill:#e3f2fd
-    style S2 fill:#e3f2fd
-    style FF fill:#fff3e0
-    style PS fill:#fce4ec
-```
-
-### ORC vs Parquet
-
-| Feature | ORC | Parquet |
-|---------|-----|---------|
-| Origin | Hortonworks/Hive | Twitter/Cloudera |
-| Default in | Hive | Spark, Impala |
-| Unit | Stripe (250MB default) | Row Group (128MB) |
-| Indexes | Built-in (3 levels) | Column stats only |
-| ACID | Native (Hive 3.x) | Via table format |
-| Nested data | Flattened | Dremel encoding |
-| Bloom filters | Built-in | Optional |
-| Compression | ZLIB, Snappy, LZ4, ZSTD | Snappy, Gzip, LZ4, ZSTD |
-| Ecosystem | Hive, Presto | Spark, most engines |
-| Update support | ACID base/delta files | Via table format |
-
-### ORC Indexes (Three Levels)
-
-```mermaid
-graph TD
-    subgraph FileLevel[" "]
-        FileLevel_title["Level 1: File-Level"]
-        style FileLevel_title fill:none,stroke:none,color:#333,font-weight:bold
-        FL["File Footer Statistics<br/>Per-column: min, max, sum, count<br/>→ Skip entire file if no match"]
-    end
-
-    subgraph StripeLevel[" "]
-        StripeLevel_title["Level 2: Stripe-Level"]
-        style StripeLevel_title fill:none,stroke:none,color:#333,font-weight:bold
-        SL["Stripe Footer Statistics<br/>Per-column per stripe<br/>→ Skip individual stripes"]
-    end
-
-    subgraph RowLevel[" "]
-        RowLevel_title["Level 3: Row Index (10K rows)"]
-        style RowLevel_title fill:none,stroke:none,color:#333,font-weight:bold
-        RL["Row Index Entries<br/>Per-column per 10K rows<br/>→ Seek within stripe"]
-    end
-
-    FL --> SL --> RL
-
-    Q["Query: WHERE amount > 1000"] --> FL
-    FL -->|"File max=500"| Skip1["SKIP entire file"]
-    FL -->|"File max=5000"| SL
-    SL -->|"Stripe max=200"| Skip2["SKIP stripe"]
-    SL -->|"Stripe max=5000"| RL
-    RL -->|"Row group max=100"| Skip3["SKIP 10K rows"]
-    RL -->|"Row group max=5000"| Read["READ these rows"]
-
-    style FileLevel fill:#e8f5e9
-    style StripeLevel fill:#e3f2fd
-    style RowLevel fill:#fff3e0
-```
+> 📖 **Chi tiết kỹ thuật (stripe structure, 3-level indexes, ACID, ORC vs Parquet):** xem [[10_Serialization_Format_Papers#4-apache-orc---2013]]
 
 ---
 
-## 9. APACHE AVRO - 2009
+### Apache Avro
 
-### Documentation Info
-- **Website:** https://avro.apache.org/
-- **Spec:** https://avro.apache.org/docs/current/specification/
-- **GitHub:** https://github.com/apache/avro
-- **Created by:** Doug Cutting (Hadoop creator)
+Avro chủ yếu đóng vai trò metadata/log serialization trong table format internals (ví dụ manifest/log files), nơi schema evolution ổn định rất quan trọng. Nó ít khi là lựa chọn chính cho analytical data files nhưng rất quan trọng cho compatibility ở control plane.
 
-### Key Contributions
-- Row-based binary serialization format
-- Schema evolution with full/transitive compatibility
-- Rich data types including unions and enums
-- Dynamic typing — schema stored with data
-- Used as serialization format in Kafka, Hudi logs, etc.
-
-### Avro File Structure
-
-```mermaid
-graph TD
-    subgraph AvroFile[" "]
-        AvroFile_title["Avro Data File (.avro)"]
-        style AvroFile_title fill:none,stroke:none,color:#333,font-weight:bold
-        Header["File Header<br/>Magic bytes: 'Obj1'<br/>Schema (JSON)<br/>Sync marker (16 bytes)"]
-        
-        subgraph Block1[" "]
-            Block1_title["Data Block 1"]
-            style Block1_title fill:none,stroke:none,color:#333,font-weight:bold
-            Count1["Object Count"]
-            Size1["Block Size"]
-            Data1["Serialized Objects<br/>(binary encoded)"]
-            Sync1["Sync Marker"]
-        end
-
-        subgraph Block2[" "]
-            Block2_title["Data Block 2"]
-            style Block2_title fill:none,stroke:none,color:#333,font-weight:bold
-            Count2["Object Count"]
-            Size2["Block Size"]
-            Data2["Serialized Objects"]
-            Sync2["Sync Marker"]
-        end
-    end
-
-    Header --> Block1 --> Block2
-
-    style Header fill:#e3f2fd
-    style Block1 fill:#e8f5e9
-    style Block2 fill:#e8f5e9
-```
-
-### Schema Evolution Rules
-
-```mermaid
-graph TD
-    subgraph Compatible[" "]
-        Compatible_title["Schema Evolution Rules"]
-        style Compatible_title fill:none,stroke:none,color:#333,font-weight:bold
-        Add["Add field with default<br/>→ COMPATIBLE ✅"]
-        Remove["Remove field with default<br/>→ COMPATIBLE ✅"]
-        Rename["Rename field (with aliases)<br/>→ COMPATIBLE ✅"]
-        Widen["Widen type (int→long)<br/>→ COMPATIBLE ✅"]
-        AddNoDefault["Add required field<br/>→ BREAKING ❌"]
-        RemoveNoDefault["Remove required field<br/>→ BREAKING ❌"]
-    end
-
-    subgraph Levels[" "]
-        Levels_title["Compatibility Levels"]
-        style Levels_title fill:none,stroke:none,color:#333,font-weight:bold
-        BW["BACKWARD: new schema reads old data"]
-        FW["FORWARD: old schema reads new data"]
-        FULL["FULL: both directions"]
-        TRANS["TRANSITIVE: across all versions"]
-    end
-
-    style Compatible fill:#e8f5e9
-    style Levels fill:#e3f2fd
-```
-
-**Avro Schema Example:**
-
-```json
-{
-  "type": "record",
-  "name": "User",
-  "namespace": "com.example",
-  "fields": [
-    {"name": "id", "type": "long"},
-    {"name": "name", "type": "string"},
-    {"name": "email", "type": ["null", "string"], "default": null},
-    {"name": "age", "type": ["null", "int"], "default": null},
-    {
-      "name": "address",
-      "type": {
-        "type": "record",
-        "name": "Address",
-        "fields": [
-          {"name": "street", "type": "string"},
-          {"name": "city", "type": "string"},
-          {"name": "zip", "type": "string"}
-        ]
-      }
-    }
-  ]
-}
-```
-
-### Avro vs Parquet vs ORC
-
-| Feature | Avro | Parquet | ORC |
-|---------|------|---------|-----|
-| Layout | Row-based | Columnar | Columnar |
-| Best for | Write-heavy, serialization | Analytics, reads | Hive analytics |
-| Schema evolution | ⭐ Excellent | ✅ Good | ✅ Good |
-| Compression ratio | Good | ⭐ Excellent | ⭐ Excellent |
-| Read performance | Good (full row) | ⭐ (column pruning) | ⭐ (column pruning) |
-| Write performance | ⭐ Fast | Good | Good |
-| Splittable | ✅ Yes | ✅ Yes | ✅ Yes |
-| Schema in file | ✅ Yes | ✅ Yes | ✅ Yes |
-| Nested data | ✅ Union types | ✅ Dremel | ✅ Flattened |
-| Use case | Kafka, messaging, logs | Data lake analytics | Hive warehouse |
+> 📖 **Chi tiết kỹ thuật (schema evolution rules, encoding, Schema Registry):** xem [[10_Serialization_Format_Papers#1-apache-avro---2009]]
 
 ---
 
-## 10. ACADEMIC FOUNDATIONS
+### Apache Arrow
 
-### Log-Structured Storage
+Arrow không thay thế table files trên object storage, nhưng là lớp in-memory exchange quan trọng để giảm overhead khi data đi qua nhiều engines/runtime (SQL engine, Python, BI, UDF). Trong kiến trúc lakehouse production, Arrow giúp tăng tốc interoperability và data serving path.
 
-**Key Papers:**
-- **LSM-Tree (1996):** Patrick O'Neil et al. — "The Log-Structured Merge-Tree"
-  - Foundation for write-optimized storage
-  - Used by RocksDB, LevelDB, Cassandra, HBase
-  - Core idea: buffer writes in memory, flush sorted runs to disk, merge periodically
+> 📖 **Chi tiết kỹ thuật (memory layout, zero-copy, Arrow Flight, IPC formats):** xem [[10_Serialization_Format_Papers#5-apache-arrow---2016]]
 
-### LSM-Tree Architecture
+---
 
-```mermaid
-graph TD
-    subgraph WritePath[" "]
-        WritePath_title["Write Path"]
-        style WritePath_title fill:none,stroke:none,color:#333,font-weight:bold
-        W[Write Request] --> WAL[Write-Ahead Log<br/>Durability]
-        WAL --> MT[MemTable<br/>In-memory sorted structure]
-        MT -->|"Full"| Flush[Flush to Disk]
-    end
+## 8. ACADEMIC FOUNDATIONS
 
-    subgraph Levels[" "]
-        Levels_title["Storage Levels"]
-        style Levels_title fill:none,stroke:none,color:#333,font-weight:bold
-        Flush --> L0["Level 0 SSTable<br/>Unsorted, latest"]
-        L0 -->|"Compaction"| L1["Level 1 SSTable<br/>Sorted, merged"]
-        L1 -->|"Compaction"| L2["Level 2 SSTable<br/>Larger, sorted"]
-        L2 -->|"Compaction"| LN["Level N SSTable<br/>Largest, fully sorted"]
-    end
+Table formats xây trên 3 nền tảng lý thuyết chính. Hiểu chúng giải thích **WHY** table formats hoạt động như vậy.
 
-    subgraph ReadPath[" "]
-        ReadPath_title["Read Path"]
-        style ReadPath_title fill:none,stroke:none,color:#333,font-weight:bold
-        R[Read Request] --> MT
-        MT -->|"Miss"| L0
-        L0 -->|"Miss"| L1
-        L1 -->|"Miss"| L2
-        L2 -->|"Miss"| LN
-    end
+### LSM-Tree → Tại sao Paimon nhanh khi write
 
-    style WritePath fill:#e8f5e9
-    style Levels fill:#fff3e0
-    style ReadPath fill:#e3f2fd
-```
+Apache Paimon sử dụng LSM-Tree storage — buffer writes trong memory, flush sorted runs ra disk, compact periodically. Đây là lý do Paimon có write throughput cao hơn Iceberg/Delta cho streaming workloads.
 
-### LSM Compaction Strategies
+> 📖 **Chi tiết kỹ thuật (write path, read path, compaction strategies, amplification factors):** xem [[06_Database_Internals_Papers#1-lsm-tree---1996]]
 
-| Strategy | Description | Used By |
-|----------|------------|---------|
-| Size-Tiered | Merge similar-sized SSTables | Cassandra (default) |
-| Leveled | Fixed-size levels, merge into next | RocksDB (default) |
-| FIFO | Drop oldest when size limit reached | Time-series data |
-| Universal | Hybrid approach | RocksDB (option) |
+### MVCC → Tại sao Time Travel hoạt động
 
-### MVCC (Multi-Version Concurrency Control)
+Tất cả table formats (Iceberg snapshots, Delta versions, Hudi timeline) đều implement MVCC ở table-level: mỗi commit tạo version mới, readers đọc consistent snapshot, writers không block readers.
 
-**Concept:**
-- Maintain multiple versions of data for isolation
-- Readers don't block writers, writers don't block readers
-- Foundation for time travel in all table formats
+> 📖 **Chi tiết kỹ thuật (version chains, visibility rules, PostgreSQL/InnoDB implementation):** xem [[06_Database_Internals_Papers#3-mvcc---1981]]
 
-```mermaid
-sequenceDiagram
-    participant T1 as Transaction 1 (Read)
-    participant Store as Data Store
-    participant T2 as Transaction 2 (Write)
+### B-Tree vs LSM-Tree → Tại sao có COW và MOR
 
-    T1->>Store: Begin read at version 5
-    T1->>Store: See consistent snapshot v5
+Sự khác biệt giữa B-Tree (in-place update, read-optimized) và LSM-Tree (append-only, write-optimized) map trực tiếp sang table format patterns: **COW** = B-Tree thinking (rewrite file), **MOR** = LSM thinking (append log, merge later).
 
-    T2->>Store: Begin write
-    T2->>Store: Create new files
-    T2->>Store: Commit as version 6
-
-    T1->>Store: Still reading version 5
-    Note over T1,Store: Unaffected by v6 commit
-
-    T1->>Store: Read completes with v5 data
-
-    participant T3 as Transaction 3 (New Read)
-    T3->>Store: Begin read → sees version 6
-```
-
-### B-Tree vs LSM-Tree
-
-```mermaid
-graph LR
-    subgraph BTree[" "]
-        BTree_title["B-Tree"]
-        style BTree_title fill:none,stroke:none,color:#333,font-weight:bold
-        BT1["✅ Fast reads O(log n)"]
-        BT2["✅ Good for point lookups"]
-        BT3["❌ Write amplification"]
-        BT4["❌ Random I/O on writes"]
-        BT5["Used by: PostgreSQL, MySQL"]
-    end
-
-    subgraph LSMTree[" "]
-        LSMTree_title["LSM-Tree"]
-        style LSMTree_title fill:none,stroke:none,color:#333,font-weight:bold
-        LSM1["✅ Fast writes (sequential)"]
-        LSM2["✅ Better write throughput"]
-        LSM3["❌ Read amplification"]
-        LSM4["❌ Space amplification"]
-        LSM5["Used by: RocksDB, Cassandra"]
-    end
-
-    style BTree fill:#e3f2fd
-    style LSMTree fill:#e8f5e9
-```
+> 📖 **Chi tiết kỹ thuật (B-Tree operations, LSM amplification, so sánh chi tiết):** xem [[06_Database_Internals_Papers#2-b-tree---19701979]]
 
 ### Copy-on-Write vs Redirect-on-Write
 
@@ -1655,7 +1391,7 @@ graph TD
 
 ---
 
-## 11. INDUSTRY ADOPTION & CASE STUDIES
+## 9. INDUSTRY ADOPTION & CASE STUDIES
 
 ### Format Adoption by Major Companies
 
@@ -1732,7 +1468,7 @@ graph TD
 
 ---
 
-## 12. FUTURE DIRECTIONS
+## 10. FUTURE DIRECTIONS
 
 ### Convergence Trends
 
@@ -1815,7 +1551,7 @@ graph TD
 
 ---
 
-## SUMMARY TABLE
+## 11. SUMMARY TABLE
 
 | Format/Tech | Year | Company | Key Innovation | Primary Use Case |
 |------------|------|---------|----------------|------------------|
@@ -1870,5 +1606,36 @@ graph TD
 
 ---
 
+<mark style="background: #BBFABBA6;">💡 **Gemini Message**</mark>
+>**Apache XTable:** Một tín hiệu dự báo cho tương lai rẽ hướng của ngành data.
+
+Và điều này dẫn thẳng đến câu hỏi thứ hai của em: **Tại sao từ 2023 (với Paimon) đến nay (2026) không có thêm Table Format nào mới?**
+
+Lý do là vì **"Cuộc chiến định dạng (Format Wars) đã kết thúc"**. Không ai rảnh rỗi đi phát minh thêm một cái Table Format mới nữa, bởi vì thị trường đã bão hòa và các công nghệ hiện tại (Iceberg, Delta) đã giải quyết được 95% bài toán.
+
+Từ 2023 đến 2026, toàn bộ giới Data Engineering chuyển sự tập trung sang 3 mặt trận hoàn toàn mới:
+
+**1. Kỷ nguyên của sự hòa bình (Interoperability)** Giai đoạn trước, công ty chia phe: Team dùng Databricks thì ép xài Delta, team xài Snowflake/Athena thì ép xài Iceberg. Sự chia rẽ này làm data bị kẹt (Lock-in). Đến giai đoạn này, các công cụ dịch thuật Metadata như **Apache XTable (trước là OneTable)** hay **Databricks UniForm** xưng vương.
+
+- _Góc nhìn thực chiến:_ Bây giờ em có thể viết data bằng Spark dưới định dạng Delta Lake, nhưng XTable sẽ tự động sinh ra một file metadata của Iceberg song song. Nhờ đó, một tool khác chỉ hỗ trợ Iceberg vẫn có thể đọc hiểu dữ liệu Delta gốc mà **không cần copy data ra làm hai bản**. Đây là kỹ thuật tiết kiệm chi phí lưu trữ cực kỳ kinh khủng.
+
+
+**2. Cuộc chiến Sổ Hộ Khẩu (The Catalog Wars)** Định dạng file không còn quan trọng, thứ quan trọng bây giờ là **Catalog** – hệ thống quản lý danh bạ của toàn bộ các bảng. Dữ liệu nằm ở S3, nhưng ai sẽ là người cấp quyền truy cập, ai quản lý version, ai biết bảng nào nằm ở thư mục nào?
+
+- Đây là lý do năm 2024, Databricks bỏ ra tới **1.3 tỷ USD** chỉ để mua lại Tabular (công ty mẹ của Iceberg).
+
+- Các công ty lớn đồng loạt tung ra các chuẩn Catalog mã nguồn mở: Snowflake tung ra **Polaris Catalog**, Databricks mở mã nguồn **Unity Catalog**. Trận chiến bây giờ là hệ sinh thái quản trị (Governance), chứ không phải là nhồi nhét data vào file nữa. Khi xây dựng các hệ thống quản lý dữ liệu cá nhân, thay vì loay hoay tự viết code quản lý metadata, em có thể cắm trực tiếp Unity Catalog OSS hoặc Polaris vào là có ngay một hệ thống quản trị chuẩn Enterprise.
+
+
+**3. Table Format cho Unstructured Data & GenAI** Khi AI lên ngôi, các Table Format truyền thống (vốn dĩ sinh ra cho dữ liệu có cấu trúc dạng bảng) bắt đầu bộc lộ sự chậm chạp.
+
+- Ngành data từ 2024-2026 tập trung vào việc làm sao nhét được hàng triệu file text, PDF, hình ảnh, và đặc biệt là **Vector Embeddings** vào trong Data Lakehouse để phục vụ cho luồng truy xuất của AI Agents.
+
+- Những định dạng mới như **Lance format** (nhanh hơn Parquet 100 lần khi quét vector) nổi lên. Iceberg và Delta cũng đang vội vã nâng cấp để không chỉ theo dõi file Parquet, mà còn theo dõi sự thay đổi của các file AI này.
+
+
+Tóm lại, nếu 2017-2023 là kỷ nguyên **"Xây kho chứa đồ"** (tạo ra các format), thì 2024-2026 là kỷ nguyên **"Viết phần mềm quản lý nhà kho"** (Catalog) và **"Làm đường ray kết nối các nhà kho với nhau"** (XTable). Không có format mới, chỉ có sự tiện lợi và tiêu chuẩn hóa được đẩy lên mức tối đa!
+
+---
 *Document Version: 2.0*
 *Last Updated: February 2026*

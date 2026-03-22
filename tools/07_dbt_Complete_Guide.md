@@ -96,7 +96,7 @@ dbt (data build tool) là một **transformation workflow tool** cho phép data 
 
 ### dbt Ecosystem
 
-```
+
 ```mermaid
 flowchart TD
     subgraph ECO [" "]
@@ -121,7 +121,7 @@ flowchart TD
         CORE --> PACK
     end
 ```
-```
+
 
 ---
 
@@ -129,7 +129,7 @@ flowchart TD
 
 ### dbt Project Structure
 
-```
+```bash
 my_dbt_project/
 ├── dbt_project.yml           # Project configuration
 ├── profiles.yml              # Connection profiles (usually in ~/.dbt/)
@@ -170,7 +170,7 @@ my_dbt_project/
 
 ### How dbt Works
 
-```
+
 ```mermaid
 flowchart TD
     subgraph EXEC [" "]
@@ -201,11 +201,11 @@ flowchart TD
         P3 ~~~ EX
     end
 ```
-```
+
 
 ### DAG (Directed Acyclic Graph)
 
-```
+
 dbt Model Dependencies:
 ```mermaid
 flowchart TD
@@ -248,7 +248,7 @@ flowchart TD
         INT --> M2
     end
 ```
-```
+
 
 ---
 
@@ -359,8 +359,7 @@ FROM {{ source('raw', 'values') }}
 
 ### Incremental Strategies
 
-```
-Strategy Options:
+
 > **Strategy Options**
 > 
 > 1. **append**
@@ -378,7 +377,6 @@ Strategy Options:
 > 4. **insert_overwrite**
 >    * Replace entire partitions
 >    * Use when: Partition-level updates
-```
 
 ### Snapshots (SCD Type 2)
 
@@ -937,7 +935,7 @@ dbt debug
 
 ### 1. Analytics Engineering Stack
 
-```
+
 ```mermaid
 flowchart TD
     subgraph STACK [" "]
@@ -969,11 +967,11 @@ flowchart TD
         DBT --> M
     end
 ```
-```
+
 
 ### 2. Data Mesh with dbt Mesh
 
-```
+
 ```mermaid
 flowchart TD
     subgraph MESH [" "]
@@ -1005,7 +1003,7 @@ flowchart TD
         D_MKT ~~~ CROSS
     end
 ```
-```
+
 
 ### 3. CI/CD Pipeline
 
@@ -1090,8 +1088,6 @@ models:
 
 ### 3. Testing Strategy
 
-```
-Testing Levels:
 > **Testing Levels**
 > 
 > 1. **Source Tests**
@@ -1111,7 +1107,7 @@ Testing Levels:
 > 4. **Unit Tests (dbt 1.8+)**
 >    - Test specific transformations
 >    - Edge cases
-```
+
 
 ### 4. Performance Tips
 
