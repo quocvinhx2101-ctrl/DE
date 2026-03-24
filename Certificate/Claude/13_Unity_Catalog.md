@@ -157,6 +157,17 @@ DROP TABLE prod.bronze.raw_orders;  -- Chỉ xóa metadata, data S3 còn
 > - ✅ "1 metastore per account per **region**" (đáp án A)
 > - ✅ "If metastore has no location, **catalog MUST have managed location**" (đáp án E)
 
+**Location Fallback Hierarchy:**
+```text
+Managed Table cần lưu data ở đâu? UC tìm location theo thứ tự:
+1. Schema có managed location?  → Dùng
+2. Catalog có managed location? → Dùng
+3. Metastore có managed location? → Dùng
+4. Không ai có? → ❌ ERROR: cannot create managed table
+```
+
+**Rule quan trọng:** Nếu Metastore KHÔNG có location → **bắt buộc** Catalog hoặc Schema phải có managed location. Đây là cascading fallback, KHÔNG phải tất cả đều phải có.
+
 ---
 
 ## Cạm Bẫy Trong Đề Thi (Exam Traps)
@@ -164,9 +175,10 @@ DROP TABLE prod.bronze.raw_orders;  -- Chỉ xóa metadata, data S3 còn
 ### Trap 1: SELECT vs ALL PRIVILEGES
 - "Analysts can query but NOT modify" = **SELECT** (đáp án C, Q197). ALL PRIVILEGES = overkill.
 
-### Trap 2: VIEW chỉ cần SELECT trên VIEW
-- "Access VIEW" = chỉ cần **SELECT on VIEW** (đáp án B, Q61). KHÔNG cần SELECT trên underlying table.
-- **Logic:** VIEW = security boundary. Owner đã có quyền trên underlying table.
+### Trap 2: VIEW permissions — Shared vs Single User
+- **Shared Access Mode** (exam default): "Access VIEW on shared cluster" = chỉ cần **SELECT on VIEW** (đáp án B, Q61). UC enforces security boundary — owner đã có quyền trên underlying table.
+- ⚠️ **Single User Mode**: cần SELECT trên cả VIEW + underlying table (vì bypasses UC security).
+- **Cách nhớ:** Shared mode = VIEW bảo vệ PII. Single user = no guardrails.
 
 ### Trap 3: Owner field vs Permissions tab
 - Owner → **Owner field** trong Data Explorer. Permissions tab chỉ hiện granted permissions.

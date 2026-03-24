@@ -156,10 +156,36 @@ graph TB
 | 50 analysts chạy SQL dashboard sáng thứ 2 | **SQL Warehouse** (scale) | Multi-cluster scaling cho concurrent queries |
 | SLA 99.9% + team không có DevOps | **Serverless** | Zero-config, auto-optimize, Databricks lo hết |
 | Team nhỏ, query burst lúc sáng, idle trưa-tối | **Serverless SQL Warehouse** | Boot 2s, auto-stop khi idle |
+| Job chạy đêm, nhiều tasks, startup cluster chậm | **Cluster Pool** | Pool giữ idle VMs sẵn → job cluster boot nhanh |
 
 > 🚨 **ExamTopics Q192:** Migrate to Serverless → bước đầu tiên = **low frequency BI + adhoc SQL** (đáp án D), KHÔNG phải Python ETL pipeline. Logic: bắt đầu từ workload ít risk nhất.
 
 > 🚨 **ExamTopics Q191:** SLA cao + minimal ops overhead → **Serverless** (đáp án D). Logic: Serverless = Databricks manage mọi thứ.
+
+### Cluster Pools — Giảm Startup Time
+
+**Cluster Pool** = tập hợp idle VMs sẵn sàng, khi Job Cluster cần start → lấy VM từ pool thay vì provision mới từ cloud provider.
+
+```
+Không có Pool:  Job start → Request VM từ AWS/Azure → 3-5 phút boot → Run
+Có Pool:        Job start → Lấy VM từ Pool (đã sẵn) → ~30 giây boot → Run
+```
+
+| Tham số Pool | Ý nghĩa |
+|-------------|---------|
+| `min_idle_instances` | Số VMs luôn giữ sẵn (idle) trong pool |
+| `max_capacity` | Tổng số VMs tối đa pool có thể hold |
+| `idle_instance_autotermination_minutes` | Sau bao lâu idle VM bị terminate |
+
+**Khi nào dùng?** Job cluster có nhiều tasks, mỗi task tạo cluster riêng → startup cost cộng dồn. Pool giảm startup ~90%.
+
+> 🚨 **ExamTopics Q127:** "Job with multiple tasks, clusters take long to start. How to improve?" → **Use clusters from a Cluster Pool** (đáp án D). KHÔNG phải autoscale, SQL endpoints, hay chuyển sang job clusters (đã là job clusters rồi).
+
+### SQL Warehouse — Auto Stop
+
+SQL Warehouse có tính năng **Auto Stop**: tự terminate sau khi idle (không có query) trong khoảng thời gian cấu hình (mặc định 10-120 phút).
+
+> 🚨 **ExamTopics Q90:** "Minimize running time of SQL endpoint for daily dashboard refresh?" → **Turn on Auto Stop** (đáp án C). Auto Stop = tự tắt khi hết query → chỉ chạy khi cần.
 
 ---
 

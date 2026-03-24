@@ -11,6 +11,47 @@
 
 ---
 
+## Spark Core Concepts (Exam Guide Topic)
+
+### Lazy Evaluation + Transformations vs Actions
+
+Spark dùng **lazy evaluation**: transformations (map, filter, select, join, groupBy) KHÔNG execute ngay, chỉ build plan. Chỉ khi gọi **action** (count, collect, show, write, save) Spark mới thực sự chạy.
+
+```text
+Transformations (lazy): .filter() → .select() → .groupBy() → xây execution plan
+Action (trigger):       .count() → Spark chạy toàn bộ plan ↑ cùng lúc
+```
+
+**Tại sao?** Lazy evaluation cho phép Spark optimize toàn bộ pipeline trước khi chạy (predicate pushdown, column pruning, join reordering).
+
+### spark.sql() vs spark.table()
+
+```python
+# spark.sql() — chạy arbitrary SQL, trả về DataFrame
+df = spark.sql("SELECT * FROM customers WHERE age > 25")
+
+# spark.table() — đọc table thành DataFrame, KHÔNG chạy SQL
+df = spark.table("customers")
+```
+
+> 🚨 **ExamTopics Q28:** "Run SQL query and operate on results in PySpark?" → **`spark.sql`** (đáp án C). `spark.table` chỉ đọc table, không chạy query phức tạp.
+
+### Higher-Order Functions (Arrays without explode)
+
+```sql
+-- TRANSFORM: áp function lên mỗi element trong array
+SELECT TRANSFORM(items, x -> UPPER(x)) FROM orders;
+-- ["apple","banana"] → ["APPLE","BANANA"]
+
+-- FILTER: lọc elements trong array
+SELECT FILTER(scores, x -> x > 80) FROM students;
+-- [90, 70, 85] → [90, 85]
+
+-- EXISTS: check nếu BẤT KỲ element thỏa điều kiện
+SELECT EXISTS(items, x -> x = 'apple') FROM orders;
+-- true/false
+```
+
 ## Nền Tảng Lý Thuyết
 
 ### DDL vs DML — 2 Loại SQL Commands

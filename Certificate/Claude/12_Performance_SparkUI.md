@@ -101,6 +101,26 @@ Alert: Khi result > 100 → gửi notification
 Destination: Webhook (Slack), Email, PagerDuty
 ```
 
+**Alert Configuration Flow:**
+```text
+1. Tạo SQL Query (phải return 1 value hoặc 1 row)
+2. Create Alert → chọn Query → set trigger condition (>, <, ==)
+3. Set Alert Destination:
+   • Email destination → nhập email
+   • Webhook destination → nhập webhook URL (Slack, Teams, custom)
+   • PagerDuty destination → nhập PagerDuty service key
+4. Set refresh frequency (how often query runs to check condition)
+```
+
+**3 loại Alert Destination:**
+| Destination | Use Case |
+|------------|----------|
+| **Email** | Notify individual users |
+| **Webhook** | Notify team channel (Slack, Teams) |
+| **PagerDuty** | Critical alerts → on-call rotation |
+
+> 🚨 **ExamTopics Q131:** "Notify team via webhook when NULL > 100" → **"Alert with new webhook destination"** (đáp án C). Custom template = wrong (đó chỉ format email). Email destination = gửi cho 1 người.
+
 ---
 
 ## Cú Pháp / Keywords Cốt Lõi
@@ -111,19 +131,30 @@ Destination: Webhook (Slack), Email, PagerDuty
 Databricks SQL → Query page → Schedule → Set refresh:
 • Every 1 day / 12 hours / 1 hour / etc.
 • Set end date for schedule (stops after that date)
+• Schedule thuộc về QUERY, KHÔNG phải SQL endpoint
 ```
 
 > 🚨 **ExamTopics Q55:** "Schedule query refresh daily" → **"From the query's page in DBSQL"** (đáp án C). KHÔNG phải từ SQL endpoint page.
 
-> 🚨 **ExamTopics Q86:** "Stop query after 1 week" → **"Set refresh schedule to end on a certain date"** (đáp án C).
+> 🚨 **ExamTopics Q86:** "Stop query after 1 week" → **"Set refresh schedule to end on a certain date"** (đáp án C). KHÔNG phải limit DBUs hay limit users.
 
-### SQL Alert Setup
+### SQL Warehouse Scaling — Size vs Range Cheatsheet
 
-> 🚨 **ExamTopics Q131:** "Notify team via webhook when NULL > 100" → **"Set up Alert with new webhook alert destination"** (đáp án C).
+```text
+■ SLOW single query (query phức tạp, join lớn):
+  → Increase WAREHOUSE SIZE (S → M → L → XL)
+  = vertical scaling = stronger compute per query
+
+■ SLOW concurrent queries (nhiều user cùng lúc):
+  → Increase SCALING RANGE (Max clusters: 1 → 5 → 10)
+  = horizontal scaling = more parallel query slots
+```
+
+> 🚨 **ExamTopics Q130:** "Many users running small queries simultaneously, queries slow" → **Increase scaling range** (đáp án B). NOT warehouse size (đó cho single heavy queries).
 
 ### Jobs UI Navigation
 
-> 🚨 **ExamTopics Q129:** "Why notebook running slowly in Job?" → **"Runs tab → click active run"** (đáp án C).
+> 🚨 **ExamTopics Q129:** "Why notebook running slowly in Job?" → **"Runs tab → click active run"** (đáp án C). Tasks tab hiện task definitions, KHÔNG hiện live execution.
 
 ---
 
