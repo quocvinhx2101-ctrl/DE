@@ -18,27 +18,27 @@
 6. [Data Governance: Unity Catalog](#6-unity-catalog)
    - 6a. Three-Level Namespace & Volumes
    - 6b. Lakehouse Federation
-   - 6c. Row/Column Security & ABAC
-7. [Data Ingestion: Lakeflow Connect](#7-lakeflow-connect)
-8. [Data Transformation: Lakeflow Declarative Pipelines (formerly DLT)](#8-lakeflow-declarative-pipelines)
-9. [Orchestration: Lakeflow Jobs](#9-lakeflow-jobs)
-10. [DevOps: Declarative Automation Bundles (formerly Asset Bundles)](#10-declarative-automation-bundles)
-11. [Auto Loader (cloudFiles)](#11-auto-loader)
-12. [Structured Streaming trên Databricks](#12-structured-streaming)
-13. [Change Data Feed (CDF)](#13-change-data-feed)
-14. [Predictive Optimization](#14-predictive-optimization)
-15. [Delta Sharing — Open Protocol](#15-delta-sharing)
-16. [Databricks Marketplace & Clean Rooms](#16-marketplace--clean-rooms)
-17. [Cluster Policies & Instance Pools](#17-cluster-policies)
-18. [Network Security & Compliance](#18-network-security)
-19. [Databricks CLI & SDK](#19-databricks-cli--sdk)
-20. [Databricks SQL & BI](#20-databricks-sql)
-21. [Pricing & FinOps: System Tables](#21-pricing--finops)
-22. [Sự Thật Phũ Phàng (Limitations)](#22-sự-thật-phũ-phàng)
-23. [War Stories & Troubleshooting](#23-war-stories)
-24. [Metrics & Order of Magnitude](#24-metrics)
-25. [Micro-Labs](#25-micro-labs)
-26. [Tổng Kết & Timeline](#26-tổng-kết)
+   - 6c. Row/Column Security & ABAC 
+1. [Data Ingestion: Lakeflow Connect](#7-lakeflow-connect) **
+2. [Data Transformation: Lakeflow Declarative Pipelines (formerly DLT)](#8-lakeflow-declarative-pipelines) **
+3. [Orchestration: Lakeflow Jobs](#9-lakeflow-jobs) **
+4. [DevOps: Declarative Automation Bundles (formerly Asset Bundles)](#10-declarative-automation-bundles)
+5. [Auto Loader (cloudFiles) ](#11-auto-loader) **
+6. [Structured Streaming trên Databricks](#12-structured-streaming)
+7. [Change Data Feed (CDF)](#13-change-data-feed)
+8. [Predictive Optimization](#14-predictive-optimization)
+9. [Delta Sharing — Open Protocol](#15-delta-sharing)
+10. [Databricks Marketplace & Clean Rooms](#16-marketplace--clean-rooms)
+11. [Cluster Policies & Instance Pools](#17-cluster-policies)
+12. [Network Security & Compliance](#18-network-security)
+13. [Databricks CLI & SDK](#19-databricks-cli--sdk)
+14. [Databricks SQL & BI](#20-databricks-sql)
+15. [Pricing & FinOps: System Tables](#21-pricing--finops)
+16. [Sự Thật Phũ Phàng (Limitations)](#22-sự-thật-phũ-phàng)
+17. [War Stories & Troubleshooting](#23-war-stories)
+18. [Metrics & Order of Magnitude](#24-metrics)
+19. [Micro-Labs](#25-micro-labs)
+20. [Tổng Kết & Timeline](#26-tổng-kết)
 
 ---
 

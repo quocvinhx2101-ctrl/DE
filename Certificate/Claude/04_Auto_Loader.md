@@ -1,335 +1,79 @@
-# §2 AUTO LOADER — Incremental File Ingestion (cloudFiles)
+# 04. Auto Loader (Incremental Ingestion)
 
-> **Exam Weight:** 30% (shared) | **Difficulty:** Trung bình
-> **Exam Guide Sub-topics:** Classify valid Auto Loader sources, incremental use cases, syntax
+## 🎯 1. TL;DR
+- **Auto Loader (`cloudFiles`)**: Cơ chế đọc file gia tăng (incremental) liên tục/tự động từ Cloud Storage (S3/ADLS/GCS) vào hệ sinh thái Databricks.
+- Phù hợp nhất cho dữ liệu lớn lên tới **hàng triệu file/folder** bằng cách tự động track những file mới đến và chỉ xử lý dữ liệu chưa xử lý.
+- Công cụ chủ chốt trong kiến trúc Medallion (thường là đẩy từ source → Bronze layer).
 
----
+## 🧠 2. Bản Chất Sự Khác Biệt (Core Concepts)
 
-## TL;DR
+- Thay vì đọc đi đọc lại hay dùng trigger manual (đắt đỏ và chậm với storage lớn), **Auto Loader duy trì State** (nhờ cơ chế Checkpoint + Storage Queue) để biết file nào đã nạp.
+- Chỉ cần xác định format đầu vào `cloudFiles.format` (json, csv, avro, parquet...), Spark Structured Streaming sẽ tự động stream thành real-time hoặc batch-trigger (`Trigger.Once`).
+- Có khả năng **Auto Schema Inference** đi kèm **Schema Evolution** cực đỉnh: Khi nguồn bị đổi/thêm cột, Auto Loader phát hiện, cập nhật Schema và tiếp tục chạy mà không bị hỏng pipeline.
 
-**Auto Loader** = cơ chế tự động phát hiện files MỚI trong cloud storage và ingest vào Delta Table. Dùng format `cloudFiles` với Structured Streaming. Giải quyết bài toán "chỉ đọc file mới, không đọc lại file cũ".
+## ⌨️ 3. Cú Pháp Bắt Buộc Nhớ (Code Patterns)
 
----
-
-## Nền Tảng Lý Thuyết
-
-### Bài Toán Incremental Ingestion
-
-Hãy tưởng tượng bạn có 1 folder S3 nhận files từ hệ thống upstream:
-
-```text
-s3://raw-data/events/
-├── events_20240101.json     ← đã ingest ngày 1
-├── events_20240102.json     ← đã ingest ngày 2
-├── events_20240103.json     ← MỚI, chưa ingest
-└── events_20240104.json     ← MỚI, chưa ingest
-```
-
-**Không có Auto Loader:** Bạn phải tự viết logic:
-1. Lưu danh sách files đã ingest vào database
-2. List tất cả files trong folder
-3. So sánh → tìm files mới
-4. Đọc files mới
-5. Cập nhật danh sách đã ingest
-
-→ **Rất nhiều code**, dễ bug (miss file, đọc duplicate, crash giữa chừng).
-
-**Có Auto Loader:** Databricks tự làm tất cả:
-1. Auto Loader tự track files đã đọc (qua **checkpoint**)
-2. Mỗi lần chạy, chỉ đọc files MỚI
-3. Hỗ trợ retry nếu fail
-4. Schema evolution tự động
-
-### 2 Chế Độ Hoạt Động
-
-**1. Directory Listing Mode** (mặc định)
-- Cơ chế: Mỗi batch, Auto Loader **list toàn bộ directory** → so sánh với checkpoint → tìm files mới.
-- Ưu điểm: Đơn giản, không cần setup gì thêm.
-- Nhược điểm: Chậm nếu directory có >1 triệu files (phải list hết).
-
-**2. File Notification Mode** (recommended cho production)
-- Cơ chế: Databricks setup **cloud event notification** (AWS SQS, Azure EventGrid, GCP Pub/Sub). Khi file mới xuất hiện → cloud gửi notification → Auto Loader đọc file đó.
-- Ưu điểm: Không cần list directory. Instant detection.
-- Nhược điểm: Cần IAM permissions cho SQS/EventGrid setup.
-
-```mermaid
-graph LR
-    subgraph DL["Directory Listing"]
-        S1["S3 Folder<br/>(10,000 files)"] -->|"List ALL files"| AL1["Auto Loader"]
-        AL1 -->|"Compare checkpoint"| NEW1["2 new files found"]
-    end
-
-    subgraph FN["File Notification"]
-        S2["S3 Folder"] -->|"New file event"| SQS["SQS Queue"]
-        SQS -->|"Notify instantly"| AL2["Auto Loader"]
-    end
-    
-    style DL fill:#fff3e0
-    style FN fill:#e8f5e9
-```
-
-### Schema Evolution & Rescued Data
-
-**Schema Evolution:** Source thêm cột mới → Auto Loader tự detect + add cột vào bảng.
-
-```text
-Day 1: {"user_id": 1, "name": "Alice"}          → 2 columns
-Day 2: {"user_id": 2, "name": "Bob", "age": 25} → 3 columns (age mới!)
-Auto Loader tự thêm column "age" vào bảng Delta.
-```
-
-**Rescued Data:** File có data không match schema → thay vì fail, Auto Loader đẩy vào cột `_rescued_data`.
-
-```text
-Schema expects: user_id (INT), name (STRING)
-File contains:  {"user_id": "abc", "name": "Bob"}  ← user_id sai type!
-→ Row vẫn được ingest, "abc" nằm trong cột _rescued_data
-→ Pipeline KHÔNG fail, bạn xử lý _rescued_data sau
-```
-
----
-
-## So Sánh Với Open Source
-
-| Databricks Feature | OSS Equivalent | Khác biệt |
-|-------------------|---------------|-----------|
-| Auto Loader (`cloudFiles`) | Spark `readStream` + custom tracking | Auto Loader tự track files, schema evolve |
-| File Notification mode | Custom S3 Event → SQS → Consumer | Databricks tự setup SQS/EventGrid |
-| Directory Listing mode | `spark.readStream` + manual globbing | Auto Loader list + compare checkpoint |
-| Schema Evolution | Manual `.option("mergeSchema")` | Tự infer + evolve, không cần config |
-| Rescued Data Column | Không có | `_rescued_data` bắt bad data thay vì crash |
-
----
-
-## Cú Pháp / Keywords Cốt Lõi
-
-### Basic Auto Loader Syntax (THUỘC LÒNG)
-
-```python
-# Auto Loader — đọc JSON files mới từ S3
-df = (spark.readStream                                 # ← Streaming read
-    .format("cloudFiles")                              # ← BẮT BUỘC là "cloudFiles"
-    .option("cloudFiles.format", "json")               # ← format file nguồn
-    .option("cloudFiles.schemaLocation", "/checkpoint") # ← nơi lưu schema inferred
-    .load("/mnt/raw/events/")                          # ← source path
-)
-
-# Write to Delta table
-df.writeStream \
-    .format("delta") \
-    .option("checkpointLocation", "/checkpoint/bronze_events") \
-    .trigger(availableNow=True) \
-    .toTable("bronze.events")
-```
-
-### File Filtering — pathGlobFilter
-
-```python
-# Folder chứa lẫn .json, .csv, .png
-# Chỉ muốn đọc .png files
-df = (spark.readStream
-    .format("cloudFiles")
-    .option("cloudFiles.format", "binaryFile")
-    .option("pathGlobFilter", "*.png")       # ← Filter file type
-    .load("/mnt/images/")
-)
-```
-
-> 🚨 **ExamTopics Q179:** Đề cho 4 đáp án code. Cách nhận diện đáp án đúng:
-> 1. `readStream` (KHÔNG phải `readstream` — chữ S phải HOA)
-> 2. `.option("pathGlobFilter", "*.png")` (KHÔNG phải `pathGlobfilter`)
-> 3. `.load()` cuối cùng (KHÔNG phải `.append()`)
-
-### 1. Schema Hints (Sửa Sai Schema Infer)
-
-Khi Auto Loader infer schema sai (ví dụ string chứa số bị biến thành INT thay vì STRING), bạn ép kiểu bằng `schemaHints`:
-
+### Cú pháp cốt lõi nhất (Khai báo `format("cloudFiles")`):
 ```python
 df = (spark.readStream
-    .format("cloudFiles")
-    .option("cloudFiles.schemaHints", "user_id STRING, event_time TIMESTAMP") # Ép kiểu cụ thể
-    .load("/mnt/raw/")
+  .format("cloudFiles")           # PHẢI LÀ cloudFiles, KHÔNG PHẢI csv/json
+  .option("cloudFiles.format", "json")  # Định dạng của FILE GỐC (VD: json)
+  .option("cloudFiles.schemaLocation", "/path/to/schema_checkpoint") # Nơi lưu schema
+  .load("/path/to/source/data")   # Thư mục gốc chứa file
+)
+
+(df.writeStream
+  .option("checkpointLocation", "/path/to/checkpoint")               # Nơi lưu state (offset)
+  .trigger(availableNow=True)     # Trigger dạng batch (tuỳ chọn)
+  .toTable("my_bronze_table")     # Đẩy vào bảng Delta
 )
 ```
 
-### 2. Trigger Modes (Streaming vs Batch)
+## ⚖️ 4. Phân Biệt Các Khái Niệm Dễ Nhầm Lẫn
 
-Dòng `.trigger()` quyết định cách pipeline tiêu thụ data:
+| Khái Niệm | Auto Loader (`cloudFiles`) | Structured Streaming (Bình Thường) | COPY INTO |
+| :--- | :--- | :--- | :--- |
+| **Bản chất** | Streaming native tối ưu cho Cloud Storage (S3/ADLS) | Streaming tiêu chuẩn của Spark | Lệnh SQL batch ingestion |
+| **Tracking file mới** | Dùng Directory Listing tối ưu hoặc Notification (Queue) | Scan thư mục liên tục (rất chậm và đắt nếu có >1 tỷ file) | Track các file đã load trong transaction log của bảng đích |
+| **Lựa chọn khi nào?** | Data Volume khổng lồ, schema thay đổi liên tục, Streaming/Batch linh hoạt. | Dữ liệu đẩy từ Kafka/Kinesis (Event bus), không phải file-based. | User thích SQL thuần tuý, Volume file < 10,000 file/batch, cấu trúc tĩnh. |
 
-- **`.trigger(processingTime="10 seconds")`**: Chạy liên tục (Always-on), mỗi batch cách nhau 10 giây. Tốn cluster 24/7.
-- **`.trigger(once=True)`**: (Legacy) Chạy đúng 1 batch rồi xoá cluster. Nhược điểm là bị giới hạn số lượng files mỗi batch (có thể không xử lý hết backlog).
-- **`.trigger(availableNow=True)`**: (Recommended) Tự động gom TẤT CẢ files mới có, chia thành nhiều micro-batches hợp lý để tránh OOM, xử lý xong toàn bộ thì DỪNG cluster. -> Sự kết hợp hoàn hảo giữa Batch processing và Streaming logic.
+## ⚠️ 5. Cạm Bẫy Đề Thi & ExamTopics
 
-### 3. Schema Evolution + Rescued Data
+**1. Syntax Bắt Buộc Nhớ (Q179)**
+- 🚨 **Trap**: Đề cho 4 đoạn code PySpark và yêu cầu chọn code đúng cho Auto Loader.
+- **Đáp án**: Nhớ 3 keyword quyết định:
+  1. Phải là `readStream` (code bẫy viết sai chính tả thành `readstream`).
+  2. Phải là `format("cloudFiles")` (Đề hay lừa `format("json")` rồi option `cloudFiles` - SAI). Option con mới là `.option("cloudFiles.format", "json")`.
+  3. Option ghi HOA từng chữ cái đúng: `.option("pathGlobFilter", "*.png")`.
 
-```python
-df = (spark.readStream
-    .format("cloudFiles")
-    .option("cloudFiles.format", "json")
-    .option("cloudFiles.inferColumnTypes", "true")          # Tự infer kiểu dữ liệu
-    .option("cloudFiles.schemaEvolutionMode", "addNewColumns") # Tự thêm column mới
-    .option("rescuedDataColumn", "_rescued_data")            # Bắt bad data
-    .load("/mnt/raw/")
-)
-```
+**2. Auto Loader vs COPY INTO (Q17)**
+- 🚨 **ExamTopics Q17/Trap**: "Identify new files since previous run, only ingest new files from a shared directory"
+- **Đáp án**: **Auto Loader**. Nó thiết kế cho incremental streaming, tạo Checkpoint để track file mới. (Bẫy lừa: Unity Catalog - dùng phân quyền).
+- **Phân biệt thật nhanh**: 
+  - **"Schema Evolution", "Millions of files", "Incremental Streaming"** ➞ Auto Loader.
+  - **"Idempotent SQL command", "Thousands of files", "Simple Batch"** ➞ COPY INTO.
 
-### Auto Loader vs COPY INTO — Bảng So Sánh
+**3. Bắt Bệnh Từ Trigger Mode (Q67)**
+- 🚨 **ExamTopics Q67**: Vẫn muốn xử lý Incremental streaming nhưng "process all available data in as many batches as required" (Chạy tất cả backlog hiện tại đến khi hết thì thôi và tắt cluster).
+- **Đáp án**: Bắt buộc là `.trigger(availableNow=True)`.
+- **Bẫy**: `.trigger(once=True)` (Nó chỉ chạy ĐÚNG 1 micro-batch và dừng, dễ gây rớt data do giới hạn maxFilesPerTrigger).
 
-| Feature | Auto Loader | COPY INTO |
-|---------|------------|-----------|
-| **Cơ chế** | Streaming (`readStream`) | Batch (SQL command) |
-| **File tracking** | Checkpoint (tự động) | Idempotent (tự track) |
-| **Schema evolution** | ✅ Tự infer + evolve | ❌ Schema cố định khi define |
-| **Rescued data** | ✅ `_rescued_data` column | ❌ Fail nếu bad data |
-| **Performance (>1M files)** | ✅ File Notification = O(new files) | ❌ List all = O(total files) |
-| **Khi nào dùng** | **Mặc định — recommended** | Legacy, simple 1-shot batch |
-| **2026 Status** | **Primary ingestion method** | Still supported |
+**4. Checkpoint Location / Schema Location (Q125)**
+- 🚨 **Trap**: Schema Evolution (tự động nội suy).
+- **Quy tắc**: Gần như **BẮT BUỘC PHẢI CÓ** `cloudFiles.schemaLocation`. Không có checkpoint path thì job crash hoặc sẽ load lại data từ đầu gây Duplicate.
 
----
+**5. Rescued Data Column (Q123)**
+- Khi file JSON/CSV ném lên 1 cột có Data Type sai bét so với schema đã định -> Để tránh hụt field/rớt data, bật `.option("cloudFiles.inferColumnTypes", "true")`. Dữ liệu lỗi được gom vào cột `_rescued_data` để QA xem xét sau.
 
-## Use Case Trong Thực Tế
+## 🌟 6. Khung Tư Duy Xử Lý Tình Huống
 
-| Scenario | Tool đúng | Logic |
-|----------|----------|-------|
-| Files liên tục đổ vào S3, chỉ đọc mới | **Auto Loader** | Tự track qua checkpoint |
-| Ingest 1 lần batch 100 CSV files | COPY INTO | Simple, 1-shot, no streaming |
-| Source thêm columns mới không báo trước | **Auto Loader** | Schema evolution + rescued data |
-| >1 triệu files trong directory | **Auto Loader** (File Notification) | Không list toàn bộ = fast |
-| Source là database (PostgreSQL) | **Lakeflow Connect** | Auto Loader = files only |
+- **Auto Loader không phải "phép màu" mọi lúc**: Cực mạnh để nạp Incremental. Nhưng nếu bài toán chỉ là batch vài nghìn file một lần, thì setup SQL `COPY INTO` nhẹ, dễ vận hành và đỡ tốn tiền streaming cluster hơn.
+- **Directory Listing vs File Notification**: 
+  - *Directory listing*: Khởi bút nhanh nhất, cực tốt cho bucket vừa.
+  - *File notification*: Phải dùng khi scale siêu lớn (nhiều triệu file/ngày) nhằm tránh liệt API do lệnh "List Files" của AWS S3/GCS.
+- **Hiểu bản chất Checkpoint**: Mỗi Stream Job phải gắn với 1 checkpoint path CỐ ĐỊNH, coi như "CMND" của Job để biết nó đã đọc file nào. Xóa checkpoint tương đương "Đọc lại từ đầu".
 
-> 🚨 **ExamTopics Q17:** "Identify new files since previous run, only ingest new files" → **Auto Loader** (đáp án D). KHÔNG phải Delta Lake (storage), Unity Catalog (governance), hay Databricks SQL (BI).
-
----
-
-## Khung Tư Duy Trước Khi Vào Trap
-
-### Chọn Auto Loader hay công cụ khác
-- Nếu nguồn là file đổ liên tục và cần incremental ingestion ổn định → Auto Loader.
-- Nếu chỉ nạp một lần, khối lượng vừa phải, không cần trạng thái streaming → COPY INTO.
-- Nếu nguồn là database/API SaaS và cần connector quản trị tập trung → xem Lakeflow Connect.
-
-### 4 thành phần bắt buộc cần thuộc
-- `format("cloudFiles")`
-- `cloudFiles.format`
-- `cloudFiles.schemaLocation`
-- checkpoint location ở phần `writeStream`
-
-### Tư duy chống lỗi phổ biến
-- Sai option/typo (`pathGlobFilter`) thường khiến pipeline chạy sai lặng lẽ.
-- Thiếu checkpoint/schema location thường gây duplicate hoặc fail resume.
-
-## Giải Thích Sâu Các Chỗ Dễ Nhầm (Đối Chiếu Docs Mới)
-
-### 1) Auto Loader không phải "phép màu" thay mọi ingestion pattern
-- Auto Loader rất mạnh cho file ingestion tăng dần, đặc biệt khi dữ liệu đến liên tục và cần trạng thái ingest đáng tin cậy.
-- Nhưng nếu use case chỉ là batch SQL đơn giản, khối lượng nhỏ, ít thay đổi schema, thì giải pháp SQL-centric vẫn có thể hợp lý hơn.
-- Tư duy đúng: chọn tool theo độ phức tạp pipeline và yêu cầu vận hành dài hạn.
-
-### 2) Directory listing vs file notification: hiểu theo quy mô
-- Directory listing dễ bắt đầu và đủ tốt cho quy mô vừa.
-- File notification phát huy khi số lượng file lớn và bạn cần latency ổn định hơn.
-- Không nên mặc định một mode cho mọi workload; docs luôn định hướng chọn theo scale + cloud setup.
-
-### 3) Schema evolution cần policy rõ, không chỉ bật option
-- Nếu chỉ bật tự thêm cột mà không có quy ước naming/type, silver layer sẽ nhanh chóng khó kiểm soát.
-- Phương án bền vững: cho phép evolve có kiểm soát ở bronze, rồi chuẩn hóa schema chặt ở silver.
-
-### 4) Checkpoint là "state identity" của stream
-- Mỗi pipeline ingestion nên có checkpoint path ổn định và nhất quán theo vòng đời job.
-- Thay đổi checkpoint path tùy tiện tương đương tạo stream mới, có thể dẫn tới đọc lại dữ liệu.
-
-### 5) `availableNow` nên hiểu là chiến lược "incremental batch-like"
-- Đây là cách chạy rất thực dụng: xử lý hết backlog hiện có rồi dừng, phù hợp với lịch orchestration.
-- Đừng nhầm với continuous low-latency streaming chạy 24/7.
-
-## Lakeflow Connect — Bổ Sung Trọng Điểm Thi
-
-### 1) Khi nào nghĩ tới Lakeflow Connect thay vì Auto Loader?
-- Auto Loader: nguồn là **file/object storage** và bạn cần incremental file ingestion.
-- Lakeflow Connect: nguồn là **database/SaaS systems** và bạn muốn connector-managed ingestion.
-- Quy tắc chọn nhanh: file → Auto Loader, database/SaaS → Lakeflow Connect.
-
-### 2) Tư duy kiến trúc đúng cho exam
-- Đề thường gài bằng cách đưa yêu cầu CDC/incremental từ nguồn hệ thống ứng dụng rồi đặt lựa chọn `cloudFiles`.
-- Nếu nguồn không phải file path/object storage, chọn `cloudFiles` thường là sai hướng.
-- Hãy đọc kỹ "source type" trước khi chọn tool.
-
-### 3) Pipeline boundary nên phân tách
-- Ingestion boundary: Lakeflow Connect hoặc file ingestion vào Bronze.
-- Transformation boundary: Lakeflow Declarative Pipelines / SQL/PySpark sang Silver/Gold.
-- Tách boundary rõ giúp vừa đúng kiến trúc vừa dễ trả lời scenario questions.
-
-### 4) Checklist 15 giây khi gặp câu ingestion
-- Nguồn là file hay hệ thống dữ liệu?
-- Cần tracking file state hay connector-managed sync?
-- Câu hỏi đang nhắm vào ingestion tool hay transform framework?
-
-### 5) Lưu ý độ chính xác theo docs
-- Lakeflow Connect connectors và khả dụng có thể khác theo cloud/region/workspace.
-- Khi áp dụng thực tế, luôn đối chiếu docs connector hiện hành trước khi chốt thiết kế.
-
----
-
-## Cạm Bẫy Trong Đề Thi (Exam Traps) — Trích Từ ExamTopics
-
-## Học Sâu Trước Khi Vào Trap
-
-### 1) Mental Model: Ingestion đáng tin = Discovery + State + Schema Control
-- Discovery: tìm đúng file mới (listing/notification).
-- State: nhớ file nào đã xử lý (checkpoint/RocksDB).
-- Schema control: tránh fail khi source thay đổi field.
-
-### 2) Bài toán thật sự Auto Loader giải quyết
-- Không chỉ "đọc file" mà là "đọc file tăng dần, không trùng, có resume".
-- Đây là lý do Auto Loader thường được ưu tiên hơn các pattern batch thuần khi nguồn liên tục cập nhật.
-
-### 3) Tư duy production
-- Chọn schema strategy ngay từ đầu: strict, evolve, hay rescue.
-- Quy ước location rõ ràng: source path, schemaLocation, checkpointLocation.
-- Theo dõi pipeline metrics để phát hiện backlog và ingestion lag.
-
-### 4) Sai lầm hay gặp
-- Trộn logic one-shot batch với streaming ingestion semantics.
-- Bỏ qua typo option name khiến ingestion behavior lệch mà khó phát hiện.
-- Đổi checkpoint path giữa các lần deploy làm mất trạng thái incremental.
-
-### 5) Checklist tự kiểm
-- Bạn đã thuộc 4 option cốt lõi cho Auto Loader chưa?
-- Bạn có tiêu chí chọn `availableNow` vs `processingTime` không?
-- Bạn có chiến lược xử lý schema drift rõ ràng chưa?
-
-
-### Trap 1: Tại Sao Lại Là Auto Loader? (Q17)
-- **Tình huống:** Nguồn source liên tục sinh file vào một shared directory. File cũ giữ nguyên. Yêu cầu của Pipeline là **chỉ nạp (ingest) những file mới sinh ra** từ lần chạy kế trước.
-- **Đáp án chuẩn xác:** **Auto Loader** (Đáp án D). 
-- **Tại sao?** Vì Auto Loader tự động sinh Checkpoint (RocksDB state) để đánh dấu file nào đã nạp. Lần chạy sau nó chỉ quét `delta` (lượng file mới) thay vì đọc lại toàn bộ thư mục. Unity Catalog dùng quản lý permissions chứ không có tác dụng ingest file.
-
-### Trap 2: Lọc File Bằng Regex / Glob (Q179)
-- **Câu hỏi:** Thư mục chung có `.csv`, `.json`, `.png`. Làm sao bắt Auto Loader chỉ lấy `.png` files?
-- **Cú pháp đúng (Đáp án B):** 
-    Sau khi định dạng `binaryFile` thì thêm option `.option("pathGlobFilter", "*.png")` và kết thúc bằng `.load()` (hoặc `.load(path)`).
-- **Bẫy thi (Đáp án A, C, D):** 
-    PySpark DataStreamReader **KHÔNG CÓ hàm** `.append("/*.png")` hay `.append()`. Đây là các phương án nhiễu thường gặp. Ngoài ra, đề đôi khi viết sai chính tả `pathGlobfilter`; khi viết code thực tế nên dùng đúng API key `pathGlobFilter`.
-
-### Trap 3: Chọn Trigger Mode Hoàn Hảo (Q67)
-- **Tình huống:** Kỹ sư cấu hình pipeline đọc file -> transform -> ghi đè. Mong muốn duy nhất là "process all of the available data in as many batches as required" (Chạy tất cả data tồn đọng hiện có, bằng bao nhiêu batch cũng được tuỳ cluster tính toán, cứ hết backlog thì thôi)
-- **Đáp án đúng:** `.trigger(availableNow=True)` (Đáp án A).
-- **Bẫy (Đáp án D):** `.trigger(once=True)` cũ kĩ, nó đọc ĐÚNG 1 micro-batch và dừng lại, rất dễ gây rớt data nếu lượng file mới tồn đọng quá lớn vượt giới hạn MaxFilesPerTrigger. `availableNow` ra đời để thay thế hoàn toàn cho `once`.
-
-### Trap 4: COPY INTO Không Tăng Dòng? (Q103)
-- **Tình huống:** Chạy `COPY INTO` mỗi ngày nhưng hôm nay row count không đổi.
-- **Đáp án đúng:** File ngày đó **đã được copy trước đó** rồi; `COPY INTO` có cơ chế tracking để tránh ingest trùng.
-- **Bẫy:** Không phải do thiếu `FORMAT_OPTIONS` trong case cơ bản Parquet.
-
-### Trap 5: Auto Loader Workload Type + JSON Inference (Q122, Q123, Q125)
-- **Q122:** Auto Loader gắn chặt với **streaming workloads** (Spark Structured Streaming API).
-- **Q123:** Không khai báo schema/type hints cho JSON, nhiều cột sẽ bị infer thành `STRING` vì JSON là text-based và Auto Loader ưu tiên an toàn kiểu dữ liệu.
-- **Q125:** Streaming hop chuẩn raw → bronze cần pattern `readStream ... writeStream ... checkpointLocation ... outputMode("append")`.
-
----
-
-## 🔗 Tham Khảo
-
+## 🔗 7. Official Docs Tham Khảo
 - **Deep Dive:** [[01_Databricks#11. AUTO LOADER|01_Databricks.md — Section 11: Auto Loader]]
-- **Official Docs:** https://docs.databricks.com/en/ingestion/cloud-object-storage/auto-loader/index.html
-- **Schema Evolution:** https://docs.databricks.com/en/ingestion/cloud-object-storage/auto-loader/schema.html
+- **Docs:** [Databricks: Auto Loader](https://docs.databricks.com/en/ingestion/cloud-object-storage/auto-loader/index.html)
+- **Docs:** [Schema Evolution & Rescue](https://docs.databricks.com/en/ingestion/cloud-object-storage/auto-loader/schema.html)

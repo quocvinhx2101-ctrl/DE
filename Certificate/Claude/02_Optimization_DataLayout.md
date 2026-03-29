@@ -1,295 +1,84 @@
-# §1 OPTIMIZATION & DATA LAYOUT — Liquid Clustering, Predictive Optimization
+# 02. Optimization & Data Layout
 
-> **Exam Weight:** 10% (~4-5 câu) | **Difficulty:** Trung bình-Khó
-> **Exam Guide Sub-topics:** Enable features that simplify data layout decisions and optimize query performance
+## 🎯 1. TL;DR
+- **Data Skipping**: Databricks tự động đọc metadata (min/max của cột) ở mức file để bỏ qua các file không chứa dữ liệu thoả mãn mệnh đề `WHERE`.
+- **Liquid Clustering**: Công nghệ thế hệ mới ĐÁNH BẠI hoàn toàn Partitioning và Z-Ordering. Phân cụm dữ liệu tự động, thay đổi key bất cứ lúc nào, giải quyết bài toán "small files" của high cardinality.
+- **Predictive Optimization**: AI của Databricks tự động phân tích và chạy `OPTIMIZE` / `VACUUM` dưới nền.
 
----
+## 🧠 2. Bản Chất Lý Thuyết (Core Concepts)
 
-## TL;DR
+- **Căn bệnh "Small Files"**: Lưu trữ hàng triệu file nhỏ (ví dụ vài KB) khiến Engine tốn thời gian đọc metadata hơn là đọc dữ liệu. `OPTIMIZE` sinh ra để gom (compact) file nhỏ thành các file to (~1GB) -> Đẩy tốc độ đọc lên tối đa.
+- **Liquid Clustering vs Partitioning (Cũ)**:
+  - *Partition (Hive-style)*: Chia file vật lý theo thư mục (Vd: `year=2023/month=12/`). NẾU chia theo cột có quá nhiều giá trị duy nhất (High-cardinality như `user_id` hay `timestamp`) -> Tạo ra hàng triệu thư mục & nhỏ file -> Hệ thống sập (OOM). Đã chia partition thì KHÔNG THỂ thay đổi mà không phải ghi lại toàn bộ bảng.
+  - *Liquid Clustering*: Lưu dữ liệu linh hoạt, không tạo thư mục cứng. Chạy tốt với High-cardinality. Bạn có thể thay đổi cột Cluster bất kì lúc nào (Vd: tháng này phân cụm theo `user_id`, năm sau phân theo `event_name`) mà KHÔNG cần ghi lại dữ liệu cũ.
+- **Deletion Vectors**: Cơ chế đánh dấu dòng bị xóa (logical delete) bằng một tệp nhỏ. Giúp các thao tác `DELETE`, `UPDATE`, `MERGE` chạy cực nhanh vì không cần ghi lại (rewrite) toàn bộ file Parquet vật lý chứa dòng bị xóa đó ngay lập tức (sẽ tự gộp lại sau khi chạy `OPTIMIZE`).
 
-**Liquid Clustering** = cơ chế data layout thế hệ mới thay thế Partitioning + Z-Ordering. Cho phép thay đổi clustering key bất cứ lúc nào, chỉ cluster data mới (incremental), và tích hợp **Predictive Optimization** để tự động OPTIMIZE/VACUUM.
+## ⌨️ 3. Cú Pháp Bắt Buộc Nhớ (Code Patterns)
 
----
-
-## Nền Tảng Lý Thuyết
-
-### Data Layout là gì và tại sao quan trọng?
-
-Khi bạn lưu 1 bảng Delta trên S3, data được chia thành nhiều **Parquet files**. Mỗi file chứa một phần dữ liệu. Khi bạn chạy query `SELECT * FROM orders WHERE customer_id = 123`, Spark phải:
-
-1. **Không có layout:** Đọc TẤT CẢ files → filter → trả kết quả. Nếu bảng có 10,000 files, đọc hết 10,000 files chỉ để lấy 1 row → **RẤT CHẬM**.
-
-2. **Có layout tốt:** Spark biết `customer_id = 123` nằm ở file #42 → chỉ đọc file #42 → **CỰC NHANH**.
-
-**Data Layout = cách sắp xếp data vào files để query đọc ít files nhất có thể.**
-
-### 3 Thế Hệ Data Layout
-
-```mermaid
-timeline
-    title Lịch Sử Data Layout trên Databricks
-    2015-2020 : Hive-style Partitioning
-                : Chia data theo giá trị cột (partition_date=2024-01-01/)
-                : ❌ High cardinality = triệu folders = disaster
-    2020-2024 : Z-Ordering
-                : Sắp xếp data trong files theo nhiều cột cùng lúc
-                : ❌ Full rewrite mỗi lần, không thay đổi key được
-    2024-2026 : Liquid Clustering (GA)
-                : Incremental clustering, thay key runtime 
-                : ✅ Recommended cho mọi workload mới
-```
-
-### Partitioning — Thế Hệ 1 (LEGACY)
-
-**Cơ chế:** Chia data thành thư mục con dựa trên giá trị cột.
-
-```text
-orders/
-├── region=US/
-│   ├── part-001.parquet
-│   └── part-002.parquet
-├── region=EU/
-│   └── part-001.parquet
-└── region=APAC/
-    └── part-001.parquet
-```
-
-**Ưu điểm:** Query `WHERE region = 'US'` → Spark chỉ đọc folder `region=US/` → nhanh.
-
-**Nhược điểm chí tử:**
-- **High-cardinality column** (ví dụ: `customer_id` có 10 triệu giá trị) → tạo 10 triệu folders → mỗi folder 1 file nhỏ → **Small Files Problem** → CHẬM.
-- **Không thể thay đổi partition key** sau khi tạo bảng. Muốn đổi = tạo bảng mới + copy data.
-
-### Z-Ordering — Thế Hệ 2 (LEGACY)
-
-**Cơ chế:** Sắp xếp lại data TRONG mỗi file theo nhiều cột (space-filling curve). Spark dùng min/max stats để skip files.
-
+### Khai báo và đổi Key cho Liquid Clustering
 ```sql
-OPTIMIZE orders ZORDER BY (customer_id);
--- Sau Z-Order: file #42 chứa customer_id 100-200
--- Query WHERE customer_id = 150 → chỉ đọc file #42
+-- Lúc tạo bảng mới
+CREATE TABLE events (
+  user_id INT,
+  event_time TIMESTAMP,
+  country STRING
+) CLUSTER BY (user_id, event_time);
+
+-- Đổi key động (điểm mạnh nhất của Liquid)
+ALTER TABLE events CLUSTER BY (country);
+
+-- Trigger tiến trình sắp xếp thực tế (Incremental)
+OPTIMIZE events;
 ```
 
-**Nhược điểm:**
-- **Full rewrite:** Mỗi lần `OPTIMIZE ZORDER BY` = rewrite TẤT CẢ files. Bảng 10TB → rewrite 10TB → tốn thời gian + tiền.
-- **Key cố định:** Một khi chọn `ZORDER BY (customer_id)`, không thể đổi sang `(region, event_time)` mà không rewrite toàn bộ.
-
-### Liquid Clustering — Thế Hệ 3 (HIỆN TẠI ✅)
-
-**Cơ chế:** Clustering thông minh — chỉ sắp xếp lại data MỚI (incremental), cho phép đổi key bất cứ lúc nào.
-
+### Chạy Tối Ưu Thủ Công (Nếu không bật Predictive)
 ```sql
--- Tạo bảng với Liquid Clustering
-CREATE TABLE orders (...)
-CLUSTER BY (customer_id, purchase_date);
+-- Gộp file nhỏ thành file lớn (Compact files)
+OPTIMIZE events;
 
--- Data mới tự động được clustered khi OPTIMIZE
-OPTIMIZE orders;  -- Chỉ cluster data CHƯA được cluster
-
--- Thay đổi key bất cứ lúc nào!
-ALTER TABLE orders CLUSTER BY (region, event_time);
--- Data cũ GIỮ NGUYÊN (vẫn clustered theo key cũ)
--- Data mới sẽ clustered theo key mới
--- Dần dần, khi OPTIMIZE chạy, data cũ cũng được re-cluster
+-- Xóa các file rác (data files không còn được tham chiếu trong log) có tuổi thọ > 7 ngày (mặc định)
+VACUUM events;
 ```
 
-**Tại sao Liquid Clustering là winner?**
+## ⚖️ 4. Phân Biệt Các Khái Niệm Dễ Nhầm Lẫn
 
-| Feature | Partitioning | Z-Ordering | Liquid Clustering |
-|---------|-------------|-----------|------------------|
-| Thay đổi key | ❌ Tạo bảng mới | ❌ Full rewrite | ✅ `ALTER TABLE` |
-| Incremental | ❌ | ❌ Full rewrite | ✅ Chỉ data mới |
-| High cardinality | ❌ Small files | ✅ | ✅ |
-| Auto selection | ❌ | ❌ | ✅ Predictive Opt |
-| **Status 2026** | **deprecated** | **legacy** | **recommended** |
+| Khái Niệm | Giải Thích | Tác Động Trong Đề Thi |
+| :--- | :--- | :--- |
+| **Z-Ordering (Cũ)** | Sắp xếp dữ liệu theo nhiều chiều (multidimensional). | Đề thi mới sẽ coi nó là Legacy. Nếu đáp án có Liquid Clustering cho một workload mới hoặc đa chiều -> Chọn Liquid. |
+| **Partitioning** | Chia thư mục cứng vật lý. | Tốt cho các cột low-cardinality (như `year`, `month`). CẤM dùng cho high-cardinality. |
+| **OPTIMIZE** | Gom file nhỏ (Compaction) + sắp xếp lại theo Cluster Key. | Tối ưu hóa đọc (Read-optimized). |
+| **VACUUM** | Xóa hẳn file vật lý cũ (đã bị overwrite/delete) ra khỏi Storage. | Tiết kiệm chi phí lưu trữ Storage (đừng nhầm là nó giúp tăng tốc độ query). |
 
-### Predictive Optimization — AI tự chạy maintenance
+## ⚠️ 5. Cạm Bẫy Đề Thi & ExamTopics
 
-**Cơ chế:** Databricks tự phân tích query patterns → tự chọn thời điểm chạy OPTIMIZE + VACUUM → bạn không cần schedule.
+**1. Vấn đề "Small Files" & Over-partitioning**
+- 🚨 **Trap**: Đề đưa ra một bảng được partitioned theo một cột có High Cardinality (chứa hàng triệu giá trị như `timestamp`, `customer_id` hoặc mã vùng).
+- **Đáp án**: Dẫn tới "Small files issue". Cách fix chuẩn theo Delta Lake là đổi qua **Liquid Clustering** hoặc gỡ partition/dùng Z-Order.
 
-```sql
--- Bật Predictive Optimization cho catalog
-ALTER CATALOG prod ENABLE PREDICTIVE OPTIMIZATION;
+**2. Chiến Lược Đổi Query Pattern (Q187, Q188)**
+- 🚨 **ExamTopics Q188**: Bảng partitioned by `purchase_date`, query lại filter ở `customer_id` bị chậm. Bẫy Z-Order nhưng đáp án tốt nhất và hiện đại nhất trên Delta 3.x là **ALTER TABLE ... CLUSTER BY (customer_id, purchase_date)** (Liquid Clustering thay thế cả partition lẫn Z-Order).
+- 🚨 **ExamTopics Q187**: Bảng đã có Partition + Z-Order + Predictive Optimization nhưng **logic filter thay đổi liên tục** (tháng này group bằng vùng, tháng sau group theo User) -> **Switch to Automatic Liquid Clustering**.
 
--- Databricks sẽ tự:
--- 1. Chọn lúc low-traffic để chạy OPTIMIZE
--- 2. Tự VACUUM files cũ
--- 3. Tự chọn clustering key tối ưu (nếu dùng Liquid Clustering)
-```
+**3. Tự Động Hóa Dọn Dẹp (Predictive Optimization)**
+- 🚨 **Trap**: "eliminates the need to manually manage maintenance operations" (loại bỏ hoàn toàn công việc tối ưu hóa thủ công).
+- **Đáp án**: Nhắm thẳng vào **Predictive Optimization**. Tuy nhiên hệ thống chỉ tự động chạy (OPTIMIZE/VACUUM/ANALYZE) dựa trên cấu hình, không thay thế việc bạn phải chọn layout đúng ban đầu.
 
-**Tương tự trong đời thực:** Như mua ô tô có AutoPilot bảo dưỡng — xe tự đi thay nhớt, kiểm tra lốp, không cần bạn đặt lịch.
+**4. DELETE FROM vs VACUUM**
+- 🚨 **Trap**: Giảm chi phí lưu trữ S3/ADLS bằng cách chạy lệnh `DELETE FROM`.
+- **Sự thật**: `DELETE FROM` chỉ xóa logic (đánh dấu tombstone trong History file). Quá khứ vẫn còn đó để Time Travel. Phải chạy `VACUUM` (sau thời gian `retention`) thì file rác mới trực tiếp bị xóa khỏi thùng chứa phần cứng.
 
-### Deletion Vectors — Xóa Dữ Liệu Nhanh Hơn
+**5. Caching vs Data Layout**
+- 🚨 **Trap**: Kích hoạt "Delta caching" để giải quyết việc full table scan/truy vấn layout sai. 
+- **Giải pháp**: Caching chỉ giải quyết truy xuất phần cứng lặp lại (đọc RAM/Disk thay cho mạng). Còn **File Skipping** (bỏ qua file không chứa dữ liệu cần tìm) thì bắt buộc phải dựa vào Data Layout. Layout sai mà cache thì "vẫn rất mượt mà đọc cả đống file rác".
 
-**Cơ chế:** Thông thường (không có Deletion Vectors), khi bạn chạy `DELETE` hoặc `UPDATE` thay đổi 1 row trong file Parquet 1GB, Spark phải **đọc toàn bộ 1GB -> bỏ row đó -> viết lại file 1GB mới**. Quá trình này rất mất thời gian (Write amplification).
+## 🌟 6. Khung Tư Duy Layout (Deep Dives)
 
-Khi bật **Deletion Vectors**:
-1. Databricks **KHÔNG** viết lại file Parquet ngay lập tức.
-2. Nó tạo ra một file nhỏ (vector) đánh dấu "row X trong file Y đã bị xóa".
-3. Lúc truy vấn (SELECT), Spark đọc file Parquet + file Vector để bỏ qua các dòng bị xóa (Logical delete).
-4. Các file Parquet chỉ thực sự được viết lại và làm sạch khi chạy `OPTIMIZE` hoặc `REORG TABLE`.
+- **Layout/Thiết kế tốt** là điều kiện tiên quyết (Pha 1: Pruning/Skipping tránh việc đọc thừa data). Gói Compute lớn/Caching là tối ưu ngọn (Pha 2).
+- **Liquid Clustering đang là Meta**: Được Databricks khuyến nghị dùng cho đa số mọi bảng Delta mới. Tốt hơn Partitioning do tự động cân bằng file size, và tốt hơn Z-Order khi pattern truy vấn thay đổi liên tục.
+- **3 Câu tự hỏi khi thiết kế**: Cột filter/group là gì? Cardinality thấp hay cao? Có biến đổi theo thời gian không?
 
-**Ưu điểm:** Tăng tốc đáng kể các lệnh `DELETE`, `UPDATE`, và `MERGE` (thường dùng trong SCD Type 2 hoặc xóa dữ liệu GDPR).
-
----
-
-## So Sánh Với Open Source
-
-| Databricks Feature | OSS Equivalent | Khác biệt |
-|-------------------|---------------|-----------|
-| Liquid Clustering | Z-Ordering (Delta OSS) | Incremental, đổi key runtime, auto-choose key |
-| Predictive Optimization | Không có | AI tự chạy OPTIMIZE/VACUUM off-peak |
-| OPTIMIZE | `OPTIMIZE` (Delta OSS) | Databricks version nhanh hơn nhờ Photon |
-| Data Skipping | Parquet min/max stats | Delta + Liquid Clustering = skip 90-99% files |
-
----
-
-## Cú Pháp / Keywords Cốt Lõi
-
-### So Sánh Syntax 3 Cách (THUỘC LÒNG)
-
-```sql
--- ❌ LEGACY: Partitioning
-CREATE TABLE old_way (...) PARTITIONED BY (region);
-
--- ❌ LEGACY: Z-Ordering (phải chạy lại mỗi lần)
-OPTIMIZE my_table ZORDER BY (customer_id);
-
--- ✅ HIỆN TẠI: Liquid Clustering
-CREATE TABLE new_way (...) CLUSTER BY (customer_id, purchase_date);
-ALTER TABLE new_way CLUSTER BY (region, event_time);  -- Đổi key runtime!
-OPTIMIZE new_way;  -- Chỉ cluster data mới
-```
-
-### Kiểm tra Predictive Optimization
-
-```sql
--- Xem lịch sử operations tự động
-SELECT table_name, operation_type, operation_status, start_time
-FROM system.storage.predictive_optimization_operations_history
-ORDER BY start_time DESC;
-```
-
----
-
-## Use Case Trong Thực Tế
-
-| Scenario | Solution | Giải thích |
-|----------|----------|-----------|
-| Bảng query bằng nhiều cột filter khác nhau | Liquid Clustering (multi-column) | Cluster theo các cột hay query nhất |
-| `customer_id` có 10 triệu giá trị | Liquid Clustering (NOT Partitioning) | Partitioning = 10M folders = disaster |
-| Query pattern thay đổi: tháng trước filter `region`, tháng này filter `event_time` | Liquid Clustering (`ALTER TABLE CLUSTER BY`) | Đổi key mà không rewrite data |
-| Bảng cũ có Partition + Z-Order, vẫn chậm | **Migrate sang Liquid Clustering** | Drop partition, dùng CLUSTER BY |
-
-> 🚨 **ExamTopics Q188:** Bảng partitioned by `purchase_date`, query filter `customer_id` chậm → Đáp án đúng: **ALTER TABLE CLUSTER BY (customer_id, purchase_date)** — Liquid Clustering thay thế cả partition lẫn Z-Order.
-
-> 🚨 **ExamTopics Q187:** Bảng có Partition + Z-Order + Predictive Optimization nhưng filter thay đổi liên tục → Đáp án đúng: **Switch to Automatic Liquid Clustering** (đáp án D).
-
----
-
-## Khung Tư Duy Trước Khi Vào Trap
-
-### 3 câu hỏi nên tự hỏi trước khi chọn chiến lược layout
-- Query thường filter theo cột nào? Có thay đổi theo thời gian không?
-- Cardinality của cột filter là thấp hay cao?
-- Bài toán hiện tại là "đọc chậm do layout" hay "tính toán chậm do query/compute"?
-
-### Quy tắc thực dụng
-- Workload mới + query pattern động → ưu tiên Liquid Clustering.
-- Đừng lạm dụng partitioning với cột high-cardinality.
-- `OPTIMIZE` để compaction, `VACUUM` để dọn file cũ; hai lệnh không thay thế nhau.
-
-### Cách nhớ ngắn
-- Layout tốt giúp Spark "khỏi đọc file không cần thiết".
-- Compute mạnh chỉ giúp xử lý nhanh hơn những gì đã đọc, không thay thế layout đúng.
-
-## Giải Thích Sâu Các Chỗ Dễ Nhầm (Đối Chiếu Docs Mới)
-
-### 1) Liquid Clustering là "recommended", không phải "mọi thứ khác vô dụng"
-- Theo docs hiện tại, Liquid Clustering được khuyến nghị mạnh cho nhiều workload Delta mới, đặc biệt với query pattern thay đổi.
-- Tuy nhiên, partitioning và Z-Ordering vẫn có ngữ cảnh hợp lý trong hệ thống kế thừa hoặc thiết kế đặc thù.
-- Vì vậy tránh học theo kiểu "thấy partition là sai"; đúng hơn là "chọn cơ chế phù hợp pattern truy vấn + vận hành".
-
-### 2) Đừng nhầm bản chất 3 kỹ thuật
-- Partitioning: pruning theo thư mục/partition values.
-- Z-ORDER: cải thiện locality + file skipping cho cột truy vấn thường xuyên.
-- Liquid Clustering: hướng tiếp cận linh hoạt hơn để tổ chức dữ liệu theo key và thay đổi dần theo thời gian.
-- Nắm bản chất này giúp bạn không chọn đáp án theo từ khóa bề mặt.
-
-### 3) Predictive Optimization không thay thế tư duy thiết kế dữ liệu
-- Tự động hóa maintenance là lợi thế lớn, nhưng không cứu được mô hình dữ liệu hoặc query logic thiết kế sai.
-- Nếu bảng quá skew, key chọn sai, hoặc pipeline tạo small files quá mức, bạn vẫn cần xử lý ở tầng thiết kế.
-
-### 4) Tối ưu hiệu năng cần phân tách 2 pha
-- Pha 1: giảm data đọc không cần thiết (layout/pruning/stats).
-- Pha 2: tăng tốc xử lý phần data còn lại (compute, plan, query rewrite).
-- Sai lầm phổ biến là bỏ qua pha 1 và chỉ tăng phần cứng.
-
-### 5) Cách viết an toàn theo docs
-- Dùng cụm "ưu tiên cho workload mới" thay cho "deprecated toàn bộ".
-- Dùng cụm "nên cân nhắc" thay cho "bắt buộc" nếu docs không ghi cứng.
-
----
-
-## Cạm Bẫy Trong Đề Thi (Exam Traps) — Trích Từ ExamTopics
-
-## Học Sâu Trước Khi Vào Trap
-
-### 1) Mental Model: Performance = Read Less + Shuffle Less + Compute Right
-- Data layout là công cụ để Spark đọc ít file hơn.
-- Query tuning là công cụ để giảm shuffle/serialization cost.
-- Compute sizing chỉ phát huy tốt khi hai lớp trên đã hợp lý.
-
-### 2) Khi nào layout mới giải quyết được vấn đề?
-- Dấu hiệu đúng: query filter thường xuyên trên vài cột rõ ràng, scan volume lớn bất thường.
-- Dấu hiệu sai: bottleneck do UDF nặng hoặc join logic sai; lúc đó layout không phải thuốc chính.
-
-### 3) Tư duy chọn clustering keys
-- Ưu tiên cột xuất hiện đều trong điều kiện filter quan trọng.
-- Tránh chọn key quá nhiễu theo thời gian nếu workload thay đổi liên tục.
-- Đánh giá lại key sau một chu kỳ sử dụng thực tế thay vì cố định cứng từ đầu.
-
-### 4) Vòng đời maintenance cần thuộc
-- `OPTIMIZE` = compaction để giảm small files.
-- `VACUUM` = dọn file cũ theo retention.
-- Predictive Optimization = tự động hóa maintenance trong phạm vi hỗ trợ.
-
-### 5) Checklist tự kiểm
-- Bạn phân biệt được mục tiêu của Liquid Clustering vs Partitioning chưa?
-- Bạn giải thích được vì sao high-cardinality thường không hợp partition truyền thống không?
-- Bạn biết khi nào nên nghi ngờ query logic thay vì đổ lỗi layout chưa?
-
-
-### Trap 1: Liquid Clustering vs Partitioning (Q187, Q188)
-Đây là câu hỏi RẤT HAY XUẤT HIỆN:
-- **Câu Q188:** Table partition theo `purchase_date`, nhưng query lại hay filter theo `customer_id` (high-cardinality), gây full partition scan. Cần optimize thế nào?
-  → **Đáp án B**: Alter table implementing **liquid clustering by "customer_id" AND "purchase_date"**. (Đáp án nhiễu: "keep existing partitioning" → SAI, vì Liquid Clustering được sinh ra để *thay thế* hoàn toàn partitioning).
-- **Câu Q187:** Bảng có Partition + Z-Order + Predictive Optimization bật. Nhưng query thay đổi filter liên tục, nên query vẫn chậm.
-  → **Đáp án D**: Switch Data layout from Partition+Z-Ordering to **Automatic Liquid Clustering**. (Liquid Clustering sinh ra để giải quyết Dynamic Query Patterns, tự uốn nắn layout theo query).
-
-### Trap 2: Thiết Kế Medallion Architecture (Q50, Q182, Q159)
-Đề thi rất thích hỏi định nghĩa chính xác nhiệm vụ của từng lớp Bronze/Silver/Gold.
-- **Câu Q182 (Bronze Định Nghĩa):** Tác vụ nào áp dụng cho Bronze layer?
-  → **Đáp án A**: **Ingest raw data without transformations, preserving original schemas, and store in Delta format**. (Ghi nhớ 3 KEYWORDS: Không biến đổi, Giữ nguyên schema gốc, Lưu bằng chuẩn Delta).
-- **Câu Q50 (Bronze So Với Raw):** Bronze tables liên quan đến raw data như thế nào?
-  → **Đáp án D**: Bronze tables contain a **less refined view** of data than raw data. (Chứa góc nhìn thô sơ nhất - đây là cách diễn đạt lắt léo từ Databricks).
-- **Câu Q159 (Silver Nhiệm Vụ):** Đâu là sự ghép cặp chuẩn xác giữa Layer và Dữ liệu?
-  → **Đáp án C**: **Silver Layer - Cleansed master customer data**. (Lớp Silver là nơi chứa data đã "làm sạch" - cleansed và "lọc trùng" - deduplicated trước khi tổng hợp cho business ở lớp Gold).
-
-### Trap 3: Delta Caching = giải pháp cho Data Layout?
-- **Đáp án nhiễu:** "Enable delta caching for performance" để giải quyết filter chậm. → **SAI**.
-- **Đúng:** Caching giải quyết **read latency** (đọc lại lần 2 nhanh hơn do lưu ở RAM/Disk). Data Layout (Liquid/Z-Order) giải quyết **file skipping** (không cần đọc các file không chứa data). Nếu layout sai, bạn cache 1 triệu file rác thì vẫn chậm.
-
-### Trap 4: Compaction Keyword và File Format Hiểu Đúng (Q101, Q109)
-- **Q101:** Muốn gộp nhiều file nhỏ thành file lớn để tăng performance → keyword đúng là **`OPTIMIZE`**.
-- **Bẫy:** `VACUUM` không phải compaction; `VACUUM` dùng để dọn file cũ không còn tham chiếu.
-- **Q109:** External table từ Parquet có lợi thế chính vì Parquet có **schema rõ ràng** (schema-aware), thuận lợi cho truy vấn và quản trị metadata.
-
----
-
-## 🔗 Tham Khảo
-
+## 🔗 7. Official Docs Tham Khảo
 - **Deep Dive:** [[01_Databricks#5. DELTA LAKE 3.x ECOSYSTEM|01_Databricks.md — Section 5: Delta Lake 3.x]]
 - **Deep Dive:** [[01_Databricks#14. PREDICTIVE OPTIMIZATION|01_Databricks.md — Section 14]]
-- **Official Docs:** https://docs.databricks.com/en/delta/clustering.html
-- **Predictive Optimization:** https://docs.databricks.com/en/optimizations/predictive-optimization.html
+- **Liquid Clustering:** [Databricks Docs: Clustering](https://docs.databricks.com/en/delta/clustering.html)
+- **Predictive Optimization:** [Databricks Docs: Predictive Opt](https://docs.databricks.com/en/optimizations/predictive-optimization.html)
