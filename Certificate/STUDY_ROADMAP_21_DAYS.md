@@ -7,12 +7,12 @@
 
 ## Strategy Overview
 
-| Phase | Days | Focus | Goal |
-|-------|------|-------|------|
-| **Foundation** | 1–7 | Platform + Ingestion + Delta Core | Lock in the 40% (§1 + §2) |
-| **Processing** | 8–14 | Transformations + Streaming + Pipelines | Lock in the 31% (§3) |
-| **Production & Governance** | 15–19 | Jobs + CI/CD + Unity Catalog + Sharing | Lock in the 29% (§4 + §5) |
-| **Mock & Review** | 20–21 | Full-length practice + weak-spot drilling | Go from 70% → 85%+ |
+| Phase                       | Days  | Focus                                     | Goal                      |
+| --------------------------- | ----- | ----------------------------------------- | ------------------------- |
+| **Foundation**              | 1–7   | Platform + Ingestion + Delta Core         | Lock in the 40% (§1 + §2) |
+| **Processing**              | 8–14  | Transformations + Streaming + Pipelines   | Lock in the 31% (§3)      |
+| **Production & Governance** | 15–19 | Jobs + CI/CD + Unity Catalog + Sharing    | Lock in the 29% (§4 + §5) |
+| **Mock & Review**           | 20–21 | Full-length practice + weak-spot drilling | Go from 70% → 85%+        |
 
 ---
 
@@ -24,10 +24,10 @@
 - [Hilarious §1](file:///data/DE/Fun/Certificate/Hilarious/Section%201%20%20Databricks%20Intelligence%20Platform.md) — skim "Cluster Types" section
 
 **Master these concepts:**
-- [ ] Control Plane vs Data Plane (what lives where?)
+- [x] Control Plane vs Data Plane (what lives where?)
 - [ ] All-Purpose vs Job Cluster vs SQL Warehouse — when to use each
-- [ ] Serverless: Python/SQL only, instant start, no config
-- [ ] Photon: vectorized engine, enabled by default on SQL Warehouses
+- [x] Serverless: Python/SQL only, instant start, no config
+- [x] Photon: vectorized engine, enabled by default on SQL Warehouses
 
 **Exam Trap Drill:**
 - [ ] "Which cluster type minimizes cost for a nightly ETL?" → **Job Cluster** (ephemeral, auto-terminate)

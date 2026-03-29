@@ -119,6 +119,18 @@ ALTER CATALOG prod ENABLE PREDICTIVE OPTIMIZATION;
 
 **Tương tự trong đời thực:** Như mua ô tô có AutoPilot bảo dưỡng — xe tự đi thay nhớt, kiểm tra lốp, không cần bạn đặt lịch.
 
+### Deletion Vectors — Xóa Dữ Liệu Nhanh Hơn
+
+**Cơ chế:** Thông thường (không có Deletion Vectors), khi bạn chạy `DELETE` hoặc `UPDATE` thay đổi 1 row trong file Parquet 1GB, Spark phải **đọc toàn bộ 1GB -> bỏ row đó -> viết lại file 1GB mới**. Quá trình này rất mất thời gian (Write amplification).
+
+Khi bật **Deletion Vectors**:
+1. Databricks **KHÔNG** viết lại file Parquet ngay lập tức.
+2. Nó tạo ra một file nhỏ (vector) đánh dấu "row X trong file Y đã bị xóa".
+3. Lúc truy vấn (SELECT), Spark đọc file Parquet + file Vector để bỏ qua các dòng bị xóa (Logical delete).
+4. Các file Parquet chỉ thực sự được viết lại và làm sạch khi chạy `OPTIMIZE` hoặc `REORG TABLE`.
+
+**Ưu điểm:** Tăng tốc đáng kể các lệnh `DELETE`, `UPDATE`, và `MERGE` (thường dùng trong SCD Type 2 hoặc xóa dữ liệu GDPR).
+
 ---
 
 ## So Sánh Với Open Source
@@ -175,22 +187,103 @@ ORDER BY start_time DESC;
 
 ---
 
-## Cạm Bẫy Trong Đề Thi (Exam Traps)
+## Khung Tư Duy Trước Khi Vào Trap
 
-### Trap 1: Liquid Clustering + giữ partition cũ
-- **Đáp án nhiễu:** "Alter table implementing liquid clustering on customer_id **while keeping the existing partitioning**" → **SAI**.
-- **Đúng:** Liquid Clustering **thay thế** partition. Không dùng cả hai cùng lúc.
-- **Logic:** Liquid Clustering tự quản lý data layout. Partition = redundant + conflict.
+### 3 câu hỏi nên tự hỏi trước khi chọn chiến lược layout
+- Query thường filter theo cột nào? Có thay đổi theo thời gian không?
+- Cardinality của cột filter là thấp hay cao?
+- Bài toán hiện tại là "đọc chậm do layout" hay "tính toán chậm do query/compute"?
 
-### Trap 2: Delta Caching = giải pháp cho data layout
-- **Đáp án nhiễu:** "Enable delta caching for performance" → **SAI** cho data layout problem.
-- **Đúng:** Caching giải quyết **read latency** (lần 2 đọc nhanh hơn). Data layout giải quyết **file skipping** (đọc ít files hơn).
-- **Logic:** Nếu phải đọc 10,000 files, cache chỉ giúp lần 2. Layout giúp mọi lần.
+### Quy tắc thực dụng
+- Workload mới + query pattern động → ưu tiên Liquid Clustering.
+- Đừng lạm dụng partitioning với cột high-cardinality.
+- `OPTIMIZE` để compaction, `VACUUM` để dọn file cũ; hai lệnh không thay thế nhau.
 
-### Trap 3: Nhầm Z-ORDER với Liquid Clustering
-- **Đáp án nhiễu:** "Tweak Z-Order columns and run OPTIMIZE manually" → **SAI** cho dynamic queries.
-- **Đúng:** Z-Order = cố định key, full rewrite. Liquid Clustering = flexible key, incremental.
-- **Logic:** Nếu query pattern thay đổi, cần tool thay đổi được key → Liquid Clustering.
+### Cách nhớ ngắn
+- Layout tốt giúp Spark "khỏi đọc file không cần thiết".
+- Compute mạnh chỉ giúp xử lý nhanh hơn những gì đã đọc, không thay thế layout đúng.
+
+## Giải Thích Sâu Các Chỗ Dễ Nhầm (Đối Chiếu Docs Mới)
+
+### 1) Liquid Clustering là "recommended", không phải "mọi thứ khác vô dụng"
+- Theo docs hiện tại, Liquid Clustering được khuyến nghị mạnh cho nhiều workload Delta mới, đặc biệt với query pattern thay đổi.
+- Tuy nhiên, partitioning và Z-Ordering vẫn có ngữ cảnh hợp lý trong hệ thống kế thừa hoặc thiết kế đặc thù.
+- Vì vậy tránh học theo kiểu "thấy partition là sai"; đúng hơn là "chọn cơ chế phù hợp pattern truy vấn + vận hành".
+
+### 2) Đừng nhầm bản chất 3 kỹ thuật
+- Partitioning: pruning theo thư mục/partition values.
+- Z-ORDER: cải thiện locality + file skipping cho cột truy vấn thường xuyên.
+- Liquid Clustering: hướng tiếp cận linh hoạt hơn để tổ chức dữ liệu theo key và thay đổi dần theo thời gian.
+- Nắm bản chất này giúp bạn không chọn đáp án theo từ khóa bề mặt.
+
+### 3) Predictive Optimization không thay thế tư duy thiết kế dữ liệu
+- Tự động hóa maintenance là lợi thế lớn, nhưng không cứu được mô hình dữ liệu hoặc query logic thiết kế sai.
+- Nếu bảng quá skew, key chọn sai, hoặc pipeline tạo small files quá mức, bạn vẫn cần xử lý ở tầng thiết kế.
+
+### 4) Tối ưu hiệu năng cần phân tách 2 pha
+- Pha 1: giảm data đọc không cần thiết (layout/pruning/stats).
+- Pha 2: tăng tốc xử lý phần data còn lại (compute, plan, query rewrite).
+- Sai lầm phổ biến là bỏ qua pha 1 và chỉ tăng phần cứng.
+
+### 5) Cách viết an toàn theo docs
+- Dùng cụm "ưu tiên cho workload mới" thay cho "deprecated toàn bộ".
+- Dùng cụm "nên cân nhắc" thay cho "bắt buộc" nếu docs không ghi cứng.
+
+---
+
+## Cạm Bẫy Trong Đề Thi (Exam Traps) — Trích Từ ExamTopics
+
+## Học Sâu Trước Khi Vào Trap
+
+### 1) Mental Model: Performance = Read Less + Shuffle Less + Compute Right
+- Data layout là công cụ để Spark đọc ít file hơn.
+- Query tuning là công cụ để giảm shuffle/serialization cost.
+- Compute sizing chỉ phát huy tốt khi hai lớp trên đã hợp lý.
+
+### 2) Khi nào layout mới giải quyết được vấn đề?
+- Dấu hiệu đúng: query filter thường xuyên trên vài cột rõ ràng, scan volume lớn bất thường.
+- Dấu hiệu sai: bottleneck do UDF nặng hoặc join logic sai; lúc đó layout không phải thuốc chính.
+
+### 3) Tư duy chọn clustering keys
+- Ưu tiên cột xuất hiện đều trong điều kiện filter quan trọng.
+- Tránh chọn key quá nhiễu theo thời gian nếu workload thay đổi liên tục.
+- Đánh giá lại key sau một chu kỳ sử dụng thực tế thay vì cố định cứng từ đầu.
+
+### 4) Vòng đời maintenance cần thuộc
+- `OPTIMIZE` = compaction để giảm small files.
+- `VACUUM` = dọn file cũ theo retention.
+- Predictive Optimization = tự động hóa maintenance trong phạm vi hỗ trợ.
+
+### 5) Checklist tự kiểm
+- Bạn phân biệt được mục tiêu của Liquid Clustering vs Partitioning chưa?
+- Bạn giải thích được vì sao high-cardinality thường không hợp partition truyền thống không?
+- Bạn biết khi nào nên nghi ngờ query logic thay vì đổ lỗi layout chưa?
+
+
+### Trap 1: Liquid Clustering vs Partitioning (Q187, Q188)
+Đây là câu hỏi RẤT HAY XUẤT HIỆN:
+- **Câu Q188:** Table partition theo `purchase_date`, nhưng query lại hay filter theo `customer_id` (high-cardinality), gây full partition scan. Cần optimize thế nào?
+  → **Đáp án B**: Alter table implementing **liquid clustering by "customer_id" AND "purchase_date"**. (Đáp án nhiễu: "keep existing partitioning" → SAI, vì Liquid Clustering được sinh ra để *thay thế* hoàn toàn partitioning).
+- **Câu Q187:** Bảng có Partition + Z-Order + Predictive Optimization bật. Nhưng query thay đổi filter liên tục, nên query vẫn chậm.
+  → **Đáp án D**: Switch Data layout from Partition+Z-Ordering to **Automatic Liquid Clustering**. (Liquid Clustering sinh ra để giải quyết Dynamic Query Patterns, tự uốn nắn layout theo query).
+
+### Trap 2: Thiết Kế Medallion Architecture (Q50, Q182, Q159)
+Đề thi rất thích hỏi định nghĩa chính xác nhiệm vụ của từng lớp Bronze/Silver/Gold.
+- **Câu Q182 (Bronze Định Nghĩa):** Tác vụ nào áp dụng cho Bronze layer?
+  → **Đáp án A**: **Ingest raw data without transformations, preserving original schemas, and store in Delta format**. (Ghi nhớ 3 KEYWORDS: Không biến đổi, Giữ nguyên schema gốc, Lưu bằng chuẩn Delta).
+- **Câu Q50 (Bronze So Với Raw):** Bronze tables liên quan đến raw data như thế nào?
+  → **Đáp án D**: Bronze tables contain a **less refined view** of data than raw data. (Chứa góc nhìn thô sơ nhất - đây là cách diễn đạt lắt léo từ Databricks).
+- **Câu Q159 (Silver Nhiệm Vụ):** Đâu là sự ghép cặp chuẩn xác giữa Layer và Dữ liệu?
+  → **Đáp án C**: **Silver Layer - Cleansed master customer data**. (Lớp Silver là nơi chứa data đã "làm sạch" - cleansed và "lọc trùng" - deduplicated trước khi tổng hợp cho business ở lớp Gold).
+
+### Trap 3: Delta Caching = giải pháp cho Data Layout?
+- **Đáp án nhiễu:** "Enable delta caching for performance" để giải quyết filter chậm. → **SAI**.
+- **Đúng:** Caching giải quyết **read latency** (đọc lại lần 2 nhanh hơn do lưu ở RAM/Disk). Data Layout (Liquid/Z-Order) giải quyết **file skipping** (không cần đọc các file không chứa data). Nếu layout sai, bạn cache 1 triệu file rác thì vẫn chậm.
+
+### Trap 4: Compaction Keyword và File Format Hiểu Đúng (Q101, Q109)
+- **Q101:** Muốn gộp nhiều file nhỏ thành file lớn để tăng performance → keyword đúng là **`OPTIMIZE`**.
+- **Bẫy:** `VACUUM` không phải compaction; `VACUUM` dùng để dọn file cũ không còn tham chiếu.
+- **Q109:** External table từ Parquet có lợi thế chính vì Parquet có **schema rõ ràng** (schema-aware), thuận lợi cho truy vấn và quản trị metadata.
 
 ---
 

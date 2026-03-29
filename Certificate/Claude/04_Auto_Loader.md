@@ -140,7 +140,27 @@ df = (spark.readStream
 > 2. `.option("pathGlobFilter", "*.png")` (KHÔNG phải `pathGlobfilter`)
 > 3. `.load()` cuối cùng (KHÔNG phải `.append()`)
 
-### Schema Evolution + Rescued Data
+### 1. Schema Hints (Sửa Sai Schema Infer)
+
+Khi Auto Loader infer schema sai (ví dụ string chứa số bị biến thành INT thay vì STRING), bạn ép kiểu bằng `schemaHints`:
+
+```python
+df = (spark.readStream
+    .format("cloudFiles")
+    .option("cloudFiles.schemaHints", "user_id STRING, event_time TIMESTAMP") # Ép kiểu cụ thể
+    .load("/mnt/raw/")
+)
+```
+
+### 2. Trigger Modes (Streaming vs Batch)
+
+Dòng `.trigger()` quyết định cách pipeline tiêu thụ data:
+
+- **`.trigger(processingTime="10 seconds")`**: Chạy liên tục (Always-on), mỗi batch cách nhau 10 giây. Tốn cluster 24/7.
+- **`.trigger(once=True)`**: (Legacy) Chạy đúng 1 batch rồi xoá cluster. Nhược điểm là bị giới hạn số lượng files mỗi batch (có thể không xử lý hết backlog).
+- **`.trigger(availableNow=True)`**: (Recommended) Tự động gom TẤT CẢ files mới có, chia thành nhiều micro-batches hợp lý để tránh OOM, xử lý xong toàn bộ thì DỪNG cluster. -> Sự kết hợp hoàn hảo giữa Batch processing và Streaming logic.
+
+### 3. Schema Evolution + Rescued Data
 
 ```python
 df = (spark.readStream
@@ -181,22 +201,130 @@ df = (spark.readStream
 
 ---
 
-## Cạm Bẫy Trong Đề Thi (Exam Traps)
+## Khung Tư Duy Trước Khi Vào Trap
 
-### Trap 1: `readstream` vs `readStream` (Case-sensitive!)
-- **Đáp án nhiễu:** `spark.readstream.format(...)` → **SAI** (chữ `s` thường).
-- **Đúng:** `spark.readStream` (chữ `S` hoa).
-- **Logic:** PySpark API dùng camelCase: `readStream`, `writeStream`, `toTable`.
+### Chọn Auto Loader hay công cụ khác
+- Nếu nguồn là file đổ liên tục và cần incremental ingestion ổn định → Auto Loader.
+- Nếu chỉ nạp một lần, khối lượng vừa phải, không cần trạng thái streaming → COPY INTO.
+- Nếu nguồn là database/API SaaS và cần connector quản trị tập trung → xem Lakeflow Connect.
 
-### Trap 2: `.load()` vs `.append()`
-- **Đáp án nhiễu:** `.append("/*.png")` → **SAI**. Không có method `.append()` trên DataStreamReader.
-- **Đúng:** Luôn dùng `.load("/path/")` cho read, `.start()` hoặc `.toTable()` cho write.
-- **Logic:** `load` = đọc data, `append` = mode write (khác context).
+### 4 thành phần bắt buộc cần thuộc
+- `format("cloudFiles")`
+- `cloudFiles.format`
+- `cloudFiles.schemaLocation`
+- checkpoint location ở phần `writeStream`
 
-### Trap 3: Auto Loader ≠ governance tool
-- **Đáp án nhiễu:** "Dùng Unity Catalog để track new files" → **SAI**.
-- **Đúng:** Auto Loader = ingestion. Unity Catalog = governance (permissions, lineage).
-- **Logic:** UC biết table nào ai truy cập. Auto Loader biết file nào đã đọc. Khác Layer.
+### Tư duy chống lỗi phổ biến
+- Sai option/typo (`pathGlobFilter`) thường khiến pipeline chạy sai lặng lẽ.
+- Thiếu checkpoint/schema location thường gây duplicate hoặc fail resume.
+
+## Giải Thích Sâu Các Chỗ Dễ Nhầm (Đối Chiếu Docs Mới)
+
+### 1) Auto Loader không phải "phép màu" thay mọi ingestion pattern
+- Auto Loader rất mạnh cho file ingestion tăng dần, đặc biệt khi dữ liệu đến liên tục và cần trạng thái ingest đáng tin cậy.
+- Nhưng nếu use case chỉ là batch SQL đơn giản, khối lượng nhỏ, ít thay đổi schema, thì giải pháp SQL-centric vẫn có thể hợp lý hơn.
+- Tư duy đúng: chọn tool theo độ phức tạp pipeline và yêu cầu vận hành dài hạn.
+
+### 2) Directory listing vs file notification: hiểu theo quy mô
+- Directory listing dễ bắt đầu và đủ tốt cho quy mô vừa.
+- File notification phát huy khi số lượng file lớn và bạn cần latency ổn định hơn.
+- Không nên mặc định một mode cho mọi workload; docs luôn định hướng chọn theo scale + cloud setup.
+
+### 3) Schema evolution cần policy rõ, không chỉ bật option
+- Nếu chỉ bật tự thêm cột mà không có quy ước naming/type, silver layer sẽ nhanh chóng khó kiểm soát.
+- Phương án bền vững: cho phép evolve có kiểm soát ở bronze, rồi chuẩn hóa schema chặt ở silver.
+
+### 4) Checkpoint là "state identity" của stream
+- Mỗi pipeline ingestion nên có checkpoint path ổn định và nhất quán theo vòng đời job.
+- Thay đổi checkpoint path tùy tiện tương đương tạo stream mới, có thể dẫn tới đọc lại dữ liệu.
+
+### 5) `availableNow` nên hiểu là chiến lược "incremental batch-like"
+- Đây là cách chạy rất thực dụng: xử lý hết backlog hiện có rồi dừng, phù hợp với lịch orchestration.
+- Đừng nhầm với continuous low-latency streaming chạy 24/7.
+
+## Lakeflow Connect — Bổ Sung Trọng Điểm Thi
+
+### 1) Khi nào nghĩ tới Lakeflow Connect thay vì Auto Loader?
+- Auto Loader: nguồn là **file/object storage** và bạn cần incremental file ingestion.
+- Lakeflow Connect: nguồn là **database/SaaS systems** và bạn muốn connector-managed ingestion.
+- Quy tắc chọn nhanh: file → Auto Loader, database/SaaS → Lakeflow Connect.
+
+### 2) Tư duy kiến trúc đúng cho exam
+- Đề thường gài bằng cách đưa yêu cầu CDC/incremental từ nguồn hệ thống ứng dụng rồi đặt lựa chọn `cloudFiles`.
+- Nếu nguồn không phải file path/object storage, chọn `cloudFiles` thường là sai hướng.
+- Hãy đọc kỹ "source type" trước khi chọn tool.
+
+### 3) Pipeline boundary nên phân tách
+- Ingestion boundary: Lakeflow Connect hoặc file ingestion vào Bronze.
+- Transformation boundary: Lakeflow Declarative Pipelines / SQL/PySpark sang Silver/Gold.
+- Tách boundary rõ giúp vừa đúng kiến trúc vừa dễ trả lời scenario questions.
+
+### 4) Checklist 15 giây khi gặp câu ingestion
+- Nguồn là file hay hệ thống dữ liệu?
+- Cần tracking file state hay connector-managed sync?
+- Câu hỏi đang nhắm vào ingestion tool hay transform framework?
+
+### 5) Lưu ý độ chính xác theo docs
+- Lakeflow Connect connectors và khả dụng có thể khác theo cloud/region/workspace.
+- Khi áp dụng thực tế, luôn đối chiếu docs connector hiện hành trước khi chốt thiết kế.
+
+---
+
+## Cạm Bẫy Trong Đề Thi (Exam Traps) — Trích Từ ExamTopics
+
+## Học Sâu Trước Khi Vào Trap
+
+### 1) Mental Model: Ingestion đáng tin = Discovery + State + Schema Control
+- Discovery: tìm đúng file mới (listing/notification).
+- State: nhớ file nào đã xử lý (checkpoint/RocksDB).
+- Schema control: tránh fail khi source thay đổi field.
+
+### 2) Bài toán thật sự Auto Loader giải quyết
+- Không chỉ "đọc file" mà là "đọc file tăng dần, không trùng, có resume".
+- Đây là lý do Auto Loader thường được ưu tiên hơn các pattern batch thuần khi nguồn liên tục cập nhật.
+
+### 3) Tư duy production
+- Chọn schema strategy ngay từ đầu: strict, evolve, hay rescue.
+- Quy ước location rõ ràng: source path, schemaLocation, checkpointLocation.
+- Theo dõi pipeline metrics để phát hiện backlog và ingestion lag.
+
+### 4) Sai lầm hay gặp
+- Trộn logic one-shot batch với streaming ingestion semantics.
+- Bỏ qua typo option name khiến ingestion behavior lệch mà khó phát hiện.
+- Đổi checkpoint path giữa các lần deploy làm mất trạng thái incremental.
+
+### 5) Checklist tự kiểm
+- Bạn đã thuộc 4 option cốt lõi cho Auto Loader chưa?
+- Bạn có tiêu chí chọn `availableNow` vs `processingTime` không?
+- Bạn có chiến lược xử lý schema drift rõ ràng chưa?
+
+
+### Trap 1: Tại Sao Lại Là Auto Loader? (Q17)
+- **Tình huống:** Nguồn source liên tục sinh file vào một shared directory. File cũ giữ nguyên. Yêu cầu của Pipeline là **chỉ nạp (ingest) những file mới sinh ra** từ lần chạy kế trước.
+- **Đáp án chuẩn xác:** **Auto Loader** (Đáp án D). 
+- **Tại sao?** Vì Auto Loader tự động sinh Checkpoint (RocksDB state) để đánh dấu file nào đã nạp. Lần chạy sau nó chỉ quét `delta` (lượng file mới) thay vì đọc lại toàn bộ thư mục. Unity Catalog dùng quản lý permissions chứ không có tác dụng ingest file.
+
+### Trap 2: Lọc File Bằng Regex / Glob (Q179)
+- **Câu hỏi:** Thư mục chung có `.csv`, `.json`, `.png`. Làm sao bắt Auto Loader chỉ lấy `.png` files?
+- **Cú pháp đúng (Đáp án B):** 
+    Sau khi định dạng `binaryFile` thì thêm option `.option("pathGlobFilter", "*.png")` và kết thúc bằng `.load()` (hoặc `.load(path)`).
+- **Bẫy thi (Đáp án A, C, D):** 
+    PySpark DataStreamReader **KHÔNG CÓ hàm** `.append("/*.png")` hay `.append()`. Đây là các phương án nhiễu thường gặp. Ngoài ra, đề đôi khi viết sai chính tả `pathGlobfilter`; khi viết code thực tế nên dùng đúng API key `pathGlobFilter`.
+
+### Trap 3: Chọn Trigger Mode Hoàn Hảo (Q67)
+- **Tình huống:** Kỹ sư cấu hình pipeline đọc file -> transform -> ghi đè. Mong muốn duy nhất là "process all of the available data in as many batches as required" (Chạy tất cả data tồn đọng hiện có, bằng bao nhiêu batch cũng được tuỳ cluster tính toán, cứ hết backlog thì thôi)
+- **Đáp án đúng:** `.trigger(availableNow=True)` (Đáp án A).
+- **Bẫy (Đáp án D):** `.trigger(once=True)` cũ kĩ, nó đọc ĐÚNG 1 micro-batch và dừng lại, rất dễ gây rớt data nếu lượng file mới tồn đọng quá lớn vượt giới hạn MaxFilesPerTrigger. `availableNow` ra đời để thay thế hoàn toàn cho `once`.
+
+### Trap 4: COPY INTO Không Tăng Dòng? (Q103)
+- **Tình huống:** Chạy `COPY INTO` mỗi ngày nhưng hôm nay row count không đổi.
+- **Đáp án đúng:** File ngày đó **đã được copy trước đó** rồi; `COPY INTO` có cơ chế tracking để tránh ingest trùng.
+- **Bẫy:** Không phải do thiếu `FORMAT_OPTIONS` trong case cơ bản Parquet.
+
+### Trap 5: Auto Loader Workload Type + JSON Inference (Q122, Q123, Q125)
+- **Q122:** Auto Loader gắn chặt với **streaming workloads** (Spark Structured Streaming API).
+- **Q123:** Không khai báo schema/type hints cho JSON, nhiều cột sẽ bị infer thành `STRING` vì JSON là text-based và Auto Loader ưu tiên an toàn kiểu dữ liệu.
+- **Q125:** Streaming hop chuẩn raw → bronze cần pattern `readStream ... writeStream ... checkpointLocation ... outputMode("append")`.
 
 ---
 

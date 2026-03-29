@@ -35,6 +35,10 @@ Trước Lakehouse, thế giới data chia làm 2 trường phái:
 
 **Lakehouse** — "Best of Both Worlds":
 
+- ✅ **Open Formats**: Lưu data bằng chuẩn mở (Parquet, Delta) trên cloud storage của bạn → **Không bị vendor lock-in** (khác với DWH đóng như Snowflake/Redshift).
+- ✅ **Multi-Persona Platform**: Một nền tảng duy nhất cho mọi roles (Data Engineers viết pipeline, Data Scientists train model, Data Analysts chạy SQL/BI) → Tăng collaboration, giảm copy data.
+- ✅ **AI-Powered (Databricks Intelligence Platform)**: Tích hợp AI sâu vào nền tảng (Databricks Assistant viết code/debug, AI-generated comments cho catalog, Predictive Optimization tự chạy maintenance).
+
 ```mermaid
 graph LR
     DWH["Data Warehouse<br/>✅ ACID, Schema, SQL<br/>❌ Only structured, Expensive"] 
@@ -87,6 +91,11 @@ graph TB
     style SL fill:#e3f2fd,stroke:#1565c0
 ```
 
+
+- Classic workspace architecture (compute/data trong cloud account của bạn)
+- Serverless workspace architecture (compute do Databricks quản lý)
+
+
 **Giải thích đơn giản:**
 - **Control Plane** = "bộ não" — Databricks hosted, chạy UI, scheduler, metadata. Bạn KHÔNG quản lý.
 - **Data Plane** = "cơ bắp" — VMs chạy trong cloud account CỦA BẠN. Data cũng nằm trong storage CỦA BẠN.
@@ -135,13 +144,14 @@ graph TB
 ### Serverless Compute — Supported Languages
 
 ```
-✅ Supported: Python, SQL
-❌ NOT Supported: R, Scala, Java
+⚠️ Lưu ý theo docs hiện tại:
+- Khả năng ngôn ngữ trên Serverless phụ thuộc bề mặt sản phẩm (Notebook/Jobs/SQL), cloud, region và workspace rollout.
+- Khi làm bài exam set cụ thể, chọn đáp án theo đúng phạm vi câu hỏi và ngữ cảnh được nêu.
 ```
 
-**Tại sao?** Serverless chạy trên JVM-free container runtime. R cần cài R runtime, Scala/Java cần JVM compilation — cả hai đều làm chậm cold start. Databricks chọn chỉ hỗ trợ Python + SQL để boot < 5 giây.
+**Cách học an toàn:** Không suy luận một danh sách ngôn ngữ cố định cho mọi môi trường. Luôn kiểm tra đúng trang docs của compute type đang dùng.
 
-> 🚨 **ExamTopics Q180:** Đề hỏi "Which languages are supported by Serverless compute?" → Đáp án: **SQL + Python** (chọn 2). R, Scala, Java đều SAI.
+> 🚨 **ExamTopics Q180:** Với bộ đề hiện tại trong repo, đáp án bám theo ngữ cảnh câu hỏi là **SQL + Python**. Khi áp dụng thực tế, vẫn phải đối chiếu docs ở workspace của bạn.
 
 ---
 
@@ -189,22 +199,112 @@ SQL Warehouse có tính năng **Auto Stop**: tự terminate sau khi idle (không
 
 ---
 
-## Cạm Bẫy Trong Đề Thi (Exam Traps)
+## Khung Tư Duy Trước Khi Vào Trap
 
-### Trap 1: Control Plane vs Data Plane
-- **Đáp án nhiễu:** "Virtual Machines nằm trong Control Plane" → **SAI**. VMs = Data Plane.
-- **Đúng:** Control Plane = Unity Catalog + Compute Orchestration (ExamTopics Q74).
-- **Cách nhớ:** Control Plane = "bộ não" (UI, scheduler, metadata). Data Plane = "cơ bắp" (VMs, storage). Bộ não KHÔNG chạy data.
+### Cách suy luận nhanh khi gặp câu về Platform
+- Bước 1: Xác định loại workload: ETL batch, interactive dev, hay BI/SQL analytics.
+- Bước 2: Xác định tiêu chí chính: tốc độ start, chi phí idle, concurrency, hay đơn giản vận hành.
+- Bước 3: Map về compute phù hợp:
+    - ETL theo lịch: Job Cluster.
+    - Dev/khám phá tương tác: All-Purpose.
+    - BI/SQL query: SQL Warehouse/Serverless SQL.
 
-### Trap 2: Serverless = hỗ trợ mọi ngôn ngữ
-- **Đáp án nhiễu:** "Serverless hỗ trợ Scala" → **SAI**.
-- **Đúng:** Chỉ **Python + SQL** (ExamTopics Q180).
-- **Cách nhớ:** Serverless cần boot nhanh → chỉ interpreted languages (Python, SQL). Compiled languages (Scala, Java) = slower.
+### Sai lầm hay gặp của người mới
+- Chọn compute theo "tên nghe mạnh" thay vì theo workload thực tế.
+- Nhầm lẫn control plane với nơi dữ liệu thực sự được lưu/truy vấn.
+- Bỏ qua Auto Stop/Cluster Pools nên chi phí tăng không cần thiết.
 
-### Trap 3: Migrate to Serverless → bắt đầu từ đâu?
-- **Đáp án nhiễu:** "Bắt đầu từ Python ETL pipeline phức tạp" → **SAI** (risk cao).
-- **Đúng:** Bắt đầu từ **low-freq BI + SQL** vì ít risk nhất.
-- **Cách nhớ:** Migration = start small, validate, then expand. SQL dashboards = simplest workload.
+## Giải Thích Sâu Các Chỗ Dễ Nhầm (Đối Chiếu Docs Mới)
+
+### 1) "Serverless luôn tốt nhất" là cách hiểu sai
+- Theo tài liệu Databricks hiện tại, Serverless là lựa chọn rất mạnh khi bạn muốn zero-config, scale nhanh và giảm vận hành thủ công.
+- Nhưng không có câu trả lời tuyệt đối kiểu "luôn nhanh nhất/luôn rẻ nhất" cho mọi workload.
+- Lý do: hiệu năng và chi phí phụ thuộc kiểu truy vấn, độ đồng thời, data layout, và cách cấu hình workload ở môi trường thực tế.
+- Cách học chắc tay: xem Serverless là mặc định nên cân nhắc trước, rồi xác nhận lại bằng nhu cầu cụ thể (latency, concurrency, governance, ngân sách).
+
+### 2) Không cố định con số startup time/DBU trong đầu
+- Các con số thời gian khởi động hoặc DBU rate thay đổi theo cloud, region, loại warehouse, chính sách giá và thời điểm.
+- Vì vậy, trong tài liệu học nên dùng ngôn ngữ "thường nhanh hơn" hoặc "thường tối ưu vận hành" thay vì cam kết số cố định.
+
+### 3) Compute selection nên đi theo trình tự quyết định
+- Bước 1: Workload là interactive dev, batch ETL, hay SQL BI?
+- Bước 2: Tính ưu tiên là độ linh hoạt, chi phí idle, hay throughput đồng thời?
+- Bước 3: Chọn compute tương ứng rồi benchmark nhỏ trước khi scale.
+- Trình tự này bám đúng tinh thần docs: chọn compute theo đặc tính workload, không theo thói quen team.
+
+### 4) Ngôn ngữ hỗ trợ trên Serverless cần đọc theo "bề mặt sản phẩm"
+- Không nên học theo một câu chung cho tất cả trường hợp.
+- Notebook serverless, jobs serverless, SQL warehouse serverless có khác biệt về phạm vi khả dụng theo thời điểm phát hành.
+- Do đó, khi gặp câu gây bối rối, hãy kiểm tra đúng trang docs của bề mặt đang dùng.
+
+### 5) Control plane vs data plane: hiểu đúng để trả lời câu security
+- Điểm cốt lõi không phải thuộc định nghĩa, mà là suy luận đúng ownership boundary.
+- Câu hỏi thường xoay quanh: metadata/control orchestration ở đâu, dữ liệu/compute runtime thực chạy ở đâu, và ai kiểm soát networking.
+- Trả lời đúng khi bạn map được boundary đó vào yêu cầu compliance của đề.
+
+## Guardrail: Availability Theo Cloud/Region/Workspace
+
+### Trước khi kết luận một feature "có/không"
+- Kiểm tra đúng trang docs theo cloud bạn dùng (AWS/Azure/GCP).
+- Kiểm tra trạng thái GA/Preview và yêu cầu workspace edition/enablement.
+- Kiểm tra giới hạn theo region hoặc policy quản trị nội bộ.
+
+### Mẫu trả lời an toàn khi ôn và làm việc thật
+- Khi làm exam: bám ngữ cảnh được mô tả trong câu hỏi.
+- Khi làm hệ thống thật: xác nhận availability matrix trước quyết định kiến trúc.
+
+---
+
+## Cạm Bẫy Trong Đề Thi (Exam Traps) — Trích Từ ExamTopics
+
+## Học Sâu Trước Khi Vào Trap
+
+### 1) Mental Model: Platform = Governance + Compute + Storage Boundaries
+- Databricks exam thường kiểm tra khả năng phân biệt "ai quản lý cái gì" hơn là nhớ tên tính năng.
+- Nếu không tách được ranh giới Control Plane/Data Plane, bạn sẽ dễ sai các câu về security, cost, ownership.
+
+### 2) Cách chọn compute theo mục tiêu kỹ thuật
+- Mục tiêu "schedule ETL + tối ưu chi phí" → tư duy về lifecycle ngắn (ephemeral) và autoscaling.
+- Mục tiêu "debug/tương tác" → ưu tiên môi trường giữ context lâu hơn.
+- Mục tiêu "BI concurrency" → ưu tiên warehouse scaling model.
+
+### 3) Cost Lens (rất hay bị hỏi gián tiếp)
+- Chi phí không chỉ là DBU; còn có idle time, startup overhead, và cloud infra side-cost.
+- Cùng một workload, khác chiến lược compute có thể ra bill khác rất xa.
+
+### 4) Security & Ownership Lens
+- "Dữ liệu nằm ở đâu" và "ai sở hữu credential truy cập" là hai câu hỏi nên tự trả lời trước mọi tình huống.
+- Câu exam thường bẫy bằng cách trộn governance concept với compute choice.
+
+### 5) Checklist tự kiểm trước khi sang Trap
+- Bạn phân biệt được All-Purpose vs Job vs SQL Warehouse chưa?
+- Bạn mô tả được khác biệt Serverless vs Classic theo 3 trục: control, cost, vận hành chưa?
+- Bạn giải thích được vì sao Cluster Pool giúp startup nhanh không?
+
+
+### Trap 1: Serverless Compute — Khi nào dùng và Tránh dùng?
+- **Tình huống (Q191):** Đề hỏi làm sao để "tránh overhead của việc tuning/quản lý cluster" và "đảm bảo SLA" → Đáp án D: **Databricks Serverless Compute**. (Databricks tự tối ưu tài nguyên, user không cần quản lý cluster).
+- **Ngôn ngữ hỗ trợ (Q180):** Serverless hỗ trợ ngôn ngữ nào? → Đáp án: **SQL và Python** (A, B). Các ngôn ngữ compiled như Scala/Java/R không được tối ưu cho cold start cực nhanh của Serverless.
+- **Migration (Q192):** Bước đầu tiên an toàn nhất để chuyển sang Serverless?
+  → Đáp án D: **Low frequency BI Dashboarding and Adhoc SQL Analytics**. KHÔNG chọn Python data transformation pipeline (B) vì workload ETL thường phức tạp và rủi ro cao hơn SQL adhoc khi test tính năng mới.
+
+### Trap 2: Giá Trị Cốt Lõi Của Data Lakehouse (Q29)
+- **Tình huống:** Data Analyst và Data Engineer có báo cáo lệch số nhau do kiến trúc siloed (phân tách).
+- **Giải pháp Lakehouse:** "Cả hai team dùng chung một **single source of truth** (nguồn dữ liệu duy nhất)" (Đáp án B). Đừng chọn các đáp án nhiễu như "họ cãi nhau nên báo cáo chung một bộ phận".
+
+### Trap 3: Control Plane vs Data Plane (Q74)
+- **Đáp án nhiễu:** "Virtual Machines nằm trong Control Plane". → **SAI**. VM = Data Plane (nơi tính toán thực tế diễn ra).
+- **Đúng:** Control Plane bao gồm **Compute Orchestration** (scheduler) và **Unity Catalog** (metadata/permissions). Bộ não chỉ quản lý, không tính toán.
+
+### Trap 4: Compute Cho ETL Batch Hàng Ngày (Q193 - ảnh bổ sung)
+- **Tình huống:** ETL batch chạy hàng ngày, workload nặng, kích thước thay đổi, cần auto-scale + tối ưu chi phí.
+- **Đáp án đúng:** **Job Cluster** (ephemeral, autoscaling theo workload, xong việc tự terminate).
+- **Bẫy:** `All-Purpose`/`Dedicated` phù hợp interactive dev; `Databricks SQL Serverless` ưu tiên BI/SQL analytics, không phải lựa chọn mặc định cho ETL batch notebook jobs.
+
+### Trap 5: Cái Gì Nằm Trong Cloud Account Của Khách Hàng? (Q15 - PDF bổ sung)
+- **Tình huống:** Đề hỏi thành phần nào thực sự nằm trong cloud account của customer.
+- **Đúng (core idea):** **Data** nằm ở data plane của cloud account khách hàng.
+- **Cách nhớ dễ:** Databricks quản trị orchestration ở control plane, còn dữ liệu gốc của doanh nghiệp phải nằm trong tài khoản cloud của chính doanh nghiệp.
 
 ---
 
