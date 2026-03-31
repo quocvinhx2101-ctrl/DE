@@ -36,7 +36,7 @@ Repo này **có nhiều file tốt hơn mức trung bình rất nhiều**, đặ
 ## Root + framing + scripts
 
 - [README.md](../README.md) — **6.3/10** | Revise | P1 | Master index tốt nhưng credibility bị kéo xuống vì count drift và packaging mismatch.
-- [MY_LEARNING_ROADMAP.md](ROADMAP.md) — **5.8/10** | Rewrite | P1 | Tone mentoring tốt nhưng drift nặng, quá dài, và trùng vai trò với repo index.
+- [MY_LEARNING_ROADMAP.md](Fun/roadmap/ROADMAP.md) — **5.8/10** | Rewrite | P1 | Tone mentoring tốt nhưng drift nặng, quá dài, và trùng vai trò với repo index.
 - [business/README.md](../business/README.md) — **8.0/10** | Keep | P2 | Framing business-first là đúng; cần file con giữ được depth đó.
 - [fundamentals/README.md](../fundamentals/README.md) — **7.5/10** | Keep | P2 | Map tốt, hơi oversell linear curriculum.
 - [projects/README.md](../projects/README.md) — **5.4/10** | Rewrite | P0 | Hứa project repo/runnable structure trong khi thực tế chủ yếu là project specs/docs.

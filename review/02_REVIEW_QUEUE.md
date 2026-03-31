@@ -4,7 +4,7 @@
 
 ### P0 / P1 framing issues
 - [x] [README.md](../README.md)
-- [x] [MY_LEARNING_ROADMAP.md](ROADMAP.md)
+- [x] [MY_LEARNING_ROADMAP.md](Fun/roadmap/ROADMAP.md)
 - [x] [projects/README.md](../projects/README.md)
 - [x] [tools/README.md](../tools/README.md)
 - [x] [convert_ascii.py](../convert_ascii.py)

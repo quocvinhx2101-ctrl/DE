@@ -70,7 +70,7 @@ Keep the structure, but rewrite the stats/versioning section and downgrade claim
 
 ---
 
-## 2) [MY_LEARNING_ROADMAP.md](ROADMAP.md)
+## 2) [MY_LEARNING_ROADMAP.md](Fun/roadmap/ROADMAP.md)
 - **Score:** 5.8/10
 - **Verdict:** Rewrite
 - **Priority:** P1
@@ -326,7 +326,7 @@ Add a distinction between “canonical papers”, “important systems”, and �
 1. **Project packaging mismatch** in [projects/README.md](../projects/README.md)
 
 ### P1
-1. **Repo count drift** across [README.md](../README.md) and [MY_LEARNING_ROADMAP.md](ROADMAP.md)
+1. **Repo count drift** across [README.md](../README.md) and [MY_LEARNING_ROADMAP.md](Fun/roadmap/ROADMAP.md)
 2. **Overconfident freshness framing** in the tools/index layer
 
 ### P2

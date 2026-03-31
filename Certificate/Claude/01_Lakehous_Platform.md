@@ -1,4 +1,6 @@
-# 01. Lakehouse Platform & Compute
+#databricks/claude 
+
+# 1. Lakehouse Platform & Compute
 
 ## 🎯 1. TL;DR
 - **Lakehouse**: Kết hợp sự linh hoạt/rẻ của Data Lake (Cloud Object Storage) và tính tin cậy/ACID của Data Warehouse (Delta Lake).
