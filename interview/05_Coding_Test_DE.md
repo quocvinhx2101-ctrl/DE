@@ -983,6 +983,239 @@ for r in results:
 
 ---
 
+## 🏃 Thử Kêu Gọi Live Coding Khét Lẹt
+
+### Task 15: Merge Overlapping Event Sessions
+
+**Problem:**
+Trong DE Live Coding, câu hỏi kinh điển nhất là "Gộp phiên User": User click lắt nhắt nhưng nới lỏng cửa sổ. Đầu vào là list các khoảng thời gian Online `[start, end]`. Yêu cầu gộp các dải thời gian bị dẫm đạp (overlap) lên nhau, trả về chuỗi phiên độc lập.
+
+```python
+# Input:
+sessions = [[1, 3], [2, 6], [8, 10], [15, 18], [9, 11]]
+# Output:
+# [[1, 6], [8, 11], [15, 18]]
+```
+
+**Solution:**
+```python
+def merge_sessions(intervals: list[list[int]]) -> list[list[int]]:
+    """O(N log N) time, O(N) space"""
+    if not intervals:
+        return []
+        
+    # Bước 1: Sort by start_time
+    intervals.sort(key=lambda x: x[0])
+    
+    merged = [intervals[0]]
+    
+    for current_start, current_end in intervals[1:]:
+        last_interval = merged[-1]
+        
+        # Nếu start của hiện tại <= end của thằng trước -> Bị đè
+        if current_start <= last_interval[1]:
+            # Extend cái end dài nhất có thể
+            last_interval[1] = max(last_interval[1], current_end)
+        else:
+            # Rời rạc -> Nạp nguyên bản
+            merged.append([current_start, current_end])
+            
+    return merged
+```
+
+---
+
+### Task 16: Top K Heavy Hitters in Stream (Trending Hashtags)
+
+**Problem:**
+Một mảng vô tận các từ khoá (hashtags) rót vô rào rào. Bắt bạn in ra 3 hashtags xuất hiện nhiều nhất (Top K). Yêu cầu: Không được sort `O(N log N)` bằng built-in Của Python vì N là vô cực. Bạn chỉ được dùng mâm Cổ `O(N log K)`.
+
+**Solution:**
+Sử dụng Hash Map đếm số lượng + Min Heap chặn cửa.
+
+```python
+from collections import Counter
+import heapq
+
+def top_k_hashtags(stream: list[str], k: int) -> list[str]:
+    """Tìm Heavy Hitters O(N log K)"""
+    counts = Counter(stream)
+    
+    # Min Heap duy trì giới hạn K elements
+    min_heap = []
+    
+    for phrase, freq in counts.items():
+        # Nhét tuple (freq, phrase) vào Heap
+        heapq.heappush(min_heap, (freq, phrase))
+        
+        # Nếu mâm chật >> Bốc dẹp đứa nghèo khổ nhất (Tần suất nhỏ nhất)
+        if len(min_heap) > k:
+            heapq.heappop(min_heap)
+            
+    # Kết quả văng ra trên Min Heap đang bị xáo trộn, phải lộn ngược
+    result = [item[1] for item in sorted(min_heap, reverse=True)]
+    return result
+```
+
+---
+
+### Task 17: Flatten Organizational Hierarchy (Manager-Employee DAG)
+
+**Problem:**
+DE hay phải xử lý bảng Master Data, trong đó cấu trúc nhân sự lồng ghép Parent-Child. Hãy bóc ngang bảng Dọc để in ra chuỗi phả hệ theo định dạng `Boss -> Manager -> Staff`. Đề cho Format: `{"EmpCode": "ManagerCode"}`. CEO không có Manager (None).
+
+```python
+emp_mgr = {
+    "C": "B",
+    "D": "B",
+    "B": "A",
+    "A": None, # A là CEO
+    "E": "D"
+}
+# Yêu cầu xuất cấu trúc từ Top-Down dạng in mảng string Path.
+```
+
+**Solution (DFS Traversal):**
+```python
+from collections import defaultdict
+
+def build_hierarchy_paths(relations: dict) -> list[str]:
+    # Xây rễ đồ thị (Parent trỏ tới list các Children)
+    tree = defaultdict(list)
+    ceo = None
+    
+    for emp, mgr in relations.items():
+        if mgr is None:
+            ceo = emp
+        else:
+            tree[mgr].append(emp)
+            
+    paths = []
+    
+    # DFS thọc sâu
+    def dfs(node, current_path):
+        current_path.append(node)
+        
+        # Nếu node không có đệ thì là mút cùng, chốt đường đi
+        if node not in tree or not tree[node]:
+            paths.append(" -> ".join(current_path))
+        else:
+            for child in tree[node]:
+                dfs(child, current_path.copy()) # copy list để các nhánh không lấn nhau
+                
+    dfs(ceo, [])
+    return paths
+
+# Output: ['A -> B -> C', 'A -> B -> D -> E']
+```
+
+---
+
+### Task 18: Stream Alignment Within Time Window (AsOf Join)
+
+**Problem:**
+Web server nhả Log Click. Payment Server nhả Log Trả Tiền. Cả 2 có Timestamp có thể Lệch nhau xíu xiu do độ trễ Mạng (vd 2 giây). Bạn được cấp 2 Array chứa các dòng theo thứ tự tăng dần Time. Viết hàm Two-Pointers để gộp dính "Click" và "Payment" nào xảy ra cùng 1 User trong vòng 3 Giây Tối Đa.
+
+**Solution:**
+```python
+def align_streams(clicks: list[dict], payments: list[dict], window_ms=3000):
+    """
+    Two-Pointer ngầm trong Real-time streaming.
+    Time O(N + M). 
+    """
+    aligned = []
+    i, j = 0, 0
+    
+    while i < len(clicks) and j < len(payments):
+        c = clicks[i]
+        p = payments[j]
+        
+        # Nếu khác User id thì đuổi mũi nhọn (Sort by time)
+        if c["user_id"] < p["user_id"]: # Giả lập user data đang xáo trộn by time (Thường đề bắt Key khớp)
+            pass
+            
+        time_diff = abs(c["time"] - p["time"])
+        
+        # Lệch xíu -> Gom bắt 
+        if c["user_id"] == p["user_id"] and time_diff <= window_ms:
+            aligned.append({
+                "user_id": c["user_id"],
+                "click_id": c["id"],
+                "payment_id": p["id"],
+                "latency_ms": time_diff
+            })
+            i += 1
+            j += 1
+        else:
+            # Thằng nào mốc thời gian cũ hơn thì Kéo nó đi trước bù mốc tương lai
+            if c["time"] < p["time"]:
+                i += 1
+            else:
+                j += 1
+                
+    return aligned
+```
+
+---
+
+### Task 19: Anomaly Detection with Moving Z-Score
+
+**Problem:**
+Detect Dữ liệu chọc sàn: Stream đổ rầm rập Cột `Transaction_Amount`. Live Code phát hiện những Phi vụ quẹt thẻ có giá trị Lệch xa X3 lần Độ lệch chuẩn (3 Standard Deviations) trong cửa sổ 5 Lần quẹt gần nhất của Khách (Moving Z-Score). 
+
+**Solution:**
+```python
+import math
+from collections import deque, defaultdict
+
+class AnomalyDetector:
+    def __init__(self, window_size=5, threshold_z=3.0):
+        self.window_size = window_size
+        self.threshold = threshold_z
+        self.user_history = defaultdict(deque)
+        
+    def _calculate_mean_std(self, data: list):
+        if len(data) < 2:
+            return sum(data)/len(data), 0
+            
+        mean = sum(data) / len(data)
+        variance = sum((x - mean) ** 2 for x in data) / (len(data) - 1) # Mẫu n-1
+        return mean, math.sqrt(variance)
+
+    def process_event(self, user_id: str, amount: float) -> bool:
+        """ Trả về True nếu Phi vụ này là Gian Lận """
+        history = self.user_history[user_id]
+        
+        # Nếu chưa đủ data nòng cốt, nhắm mắt cho qua (Trust base)
+        if len(history) < self.window_size:
+            history.append(amount)
+            return False
+            
+        mean, std_dev = self._calculate_mean_std(list(history))
+        
+        # Nếu std rỗng (dải số toàn đều tăm tắp bằng nhau) thì chặn mẫu Zero Division
+        if std_dev == 0:
+            is_anomaly = amount != mean
+        else:
+            z_score = abs(amount - mean) / std_dev
+            is_anomaly = z_score > self.threshold
+            
+        # Cập nhật Sliding Window Window  
+        history.popleft()
+        history.append(amount)
+        
+        return is_anomaly
+
+# Live Debug:
+# detector = AnomalyDetector(window_size=3, threshold_z=2.0)
+# detector.process_event("A", 10.0)
+# detector.process_event("A", 12.0)
+# detector.process_event("A", 11.0)
+# print(detector.process_event("A", 999.0)) # True (Ra đòn Cảnh sát múc!)
+```
+
+---
+
 ## 📝 Quick Reference
 
 ### Common Patterns Checklist
@@ -993,6 +1226,13 @@ Data Processing:
 [ ] Deduplicate with rules
 [ ] Sliding window aggregation
 [ ] Parse log files
+
+Live Coding DE (MỚI!):
+[ ] Merge Overlapping Sessions (Mảng gộp)
+[ ] K Heavy Hitters (Min-Heap / Hash)
+[ ] Phân rã DAG Đồ Thị Cây (DFS/BFS)
+[ ] Cân chỉnh dải Time Window 2 Mảng
+[ ] Math & Stat (Z-Score detection)
 
 SQL:
 [ ] Window functions (running total, lag/lead)

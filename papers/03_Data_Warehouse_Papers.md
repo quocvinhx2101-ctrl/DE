@@ -1073,18 +1073,18 @@ graph TB
 
 ### Summary Table
 
-| Paper/Book | Year | Key Innovation | Modern Tools |
-|------------|------|----------------|--------------|
-| Inmon DW | 1992 | EDW architecture | Enterprise DW |
-| Kimball Toolkit | 1996 | Dimensional modeling | All DW, dbt |
-| Data Vault | 2000s | Hub-Link-Satellite | dbt, Enterprise |
-| C-Store | 2005 | Columnar DBMS | Vertica, Redshift |
-| MonetDB/X100 | 2005 | Vectorized execution | DuckDB, ClickHouse |
-| Redshift | 2012 | Cloud MPP | Redshift |
-| Spark SQL | 2015 | Catalyst optimizer | Spark, Databricks |
-| Snowflake | 2016 | Storage-compute separation | Snowflake |
-| Arrow | 2016 | Columnar memory format | Pandas, Polars, DuckDB |
-| Presto | 2019 | Federated queries | Trino, Athena |
+| Paper/Book      | Year  | Key Innovation             | Modern Tools           |
+| --------------- | ----- | -------------------------- | ---------------------- |
+| Inmon DW        | 1992  | EDW architecture           | Enterprise DW          |
+| Kimball Toolkit | 1996  | Dimensional modeling       | All DW, dbt            |
+| Data Vault      | 2000s | Hub-Link-Satellite         | dbt, Enterprise        |
+| C-Store         | 2005  | Columnar DBMS              | Vertica, Redshift      |
+| MonetDB/X100    | 2005  | Vectorized execution       | DuckDB, ClickHouse     |
+| Redshift        | 2012  | Cloud MPP                  | Redshift               |
+| Spark SQL       | 2015  | Catalyst optimizer         | Spark, Databricks      |
+| Snowflake       | 2016  | Storage-compute separation | Snowflake              |
+| Arrow           | 2016  | Columnar memory format     | Pandas, Polars, DuckDB |
+| Presto          | 2019  | Federated queries          | Trino, Athena          |
 
 ---
 
